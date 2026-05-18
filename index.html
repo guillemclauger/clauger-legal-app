@@ -320,6 +320,11 @@
             
             console.log('✅ Event listeners configurados');
 
+            // Bloquear orientación horizontal (más fiable que manifest)
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(() => {});
+            }
+
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('./service-worker.js')
                     .then(() => console.log('✅ Service Worker registrado'))
