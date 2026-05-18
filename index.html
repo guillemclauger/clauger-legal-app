@@ -103,6 +103,14 @@
     </div>
 
     <!-- ============================================ -->
+    <!-- BANNER ACTUALIZACIÓN                          -->
+    <!-- ============================================ -->
+    <div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#16a34a;color:#fff;text-align:center;padding:0.75rem 1rem;font-size:1rem;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)">
+        ✅ Actualización aplicada — Versión <span id="updateVersion"></span>
+        <button onclick="document.getElementById('updateBanner').style.display='none'" style="margin-left:1.5rem;background:rgba(255,255,255,0.25);border:none;color:#fff;font-size:1rem;padding:0.2rem 0.75rem;border-radius:4px;cursor:pointer">×</button>
+    </div>
+
+    <!-- ============================================ -->
     <!-- IMAGE MODAL                                   -->
     <!-- ============================================ -->
     <div id="imageModal" class="image-modal">
@@ -316,6 +324,31 @@
                 navigator.serviceWorker.register('./service-worker.js')
                     .then(() => console.log('✅ Service Worker registrado'))
                     .catch(e => console.warn('⚠️ Service Worker:', e));
+
+                // Detectar actualización por mensaje del SW
+                navigator.serviceWorker.addEventListener('message', e => {
+                    if (e.data && e.data.type === 'APP_UPDATED') {
+                        _showUpdateBanner(e.data.version);
+                    }
+                });
+            }
+
+            // Detectar actualización por cambio de versión en localStorage (fallback)
+            const _storedVer = localStorage.getItem('clauger_app_version');
+            const _currentVer = (typeof CONFIG !== 'undefined') ? CONFIG.APP_VERSION : null;
+            if (_currentVer && _storedVer && _storedVer !== _currentVer) {
+                _showUpdateBanner(_currentVer);
+            }
+            if (_currentVer) localStorage.setItem('clauger_app_version', _currentVer);
+
+            function _showUpdateBanner(version) {
+                const banner = document.getElementById('updateBanner');
+                const vspan = document.getElementById('updateVersion');
+                if (banner && vspan) {
+                    vspan.textContent = version;
+                    banner.style.display = 'block';
+                    setTimeout(() => { banner.style.display = 'none'; }, 8000);
+                }
             }
         });
     </script>
