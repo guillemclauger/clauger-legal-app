@@ -173,8 +173,8 @@
                             App._clearAutosave();
                         }
                     }
-                    // Autoguardado cada 10 minutos + aviso si recarga accidental
-                    setInterval(() => App._doAutosave(), 10 * 60 * 1000);
+                    // Autoguardado cada 2 minutos + aviso si recarga accidental
+                    setInterval(() => App._doAutosave(), 2 * 60 * 1000);
                     window.addEventListener('beforeunload', (e) => {
                         App._doAutosave();
                         if (!window._intentionalReload) { e.preventDefault(); e.returnValue = ''; }
@@ -224,8 +224,8 @@
                                 App._clearAutosave();
                             }
                         }
-                        // Autoguardado cada 10 minutos + aviso si recarga accidental
-                        setInterval(() => App._doAutosave(), 10 * 60 * 1000);
+                        // Autoguardado cada 2 minutos + aviso si recarga accidental
+                        setInterval(() => App._doAutosave(), 2 * 60 * 1000);
                         window.addEventListener('beforeunload', (e) => {
                             App._doAutosave();
                             if (!window._intentionalReload) { e.preventDefault(); e.returnValue = ''; }
@@ -268,6 +268,9 @@
                 tab.addEventListener('click', function() {
                     const page = this.dataset.page;
                     console.log(`📑 Navegando a: ${page}`);
+
+                    // Autoguardar al cambiar de pestaña
+                    if (typeof App !== 'undefined' && App._doAutosave) App._doAutosave();
                     
                     // Actualizar tab activa
                     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
