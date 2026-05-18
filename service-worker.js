@@ -1,4 +1,4 @@
-const CACHE = 'clauger-v1';
+const CACHE = 'clauger-v2';
 const FILES = [
   './index.html',
   './manifest.json',
