@@ -1,4 +1,5 @@
-const CACHE = 'clauger-v2';
+const CACHE = 'clauger-v3';
+const VERSION = '26_01';
 const FILES = [
   './index.html',
   './manifest.json',
@@ -25,7 +26,11 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+    ).then(() => {
+      return self.clients.matchAll({ includeUncontrolled: true }).then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'APP_UPDATED', version: VERSION }));
+      });
+    })
   );
   self.clients.claim();
 });
