@@ -14,6 +14,7 @@
 const CONFIG = {
     APP_NAME: 'CLAUGER',
     VERSION: '1.1',
+    APP_VERSION: '26_01',
     LEGAL_PASSWORD: '1234'
 };
 
