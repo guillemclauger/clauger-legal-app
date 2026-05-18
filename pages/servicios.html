@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Servicios - Técnicos</title>
+</head>
+<body>
+    <div class="section-card">
+        <div class="section-title">❄️ Servicios y Cámaras</div>
+        
+        <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1.5rem;">
+            <p style="color: #1e40af; font-weight: 600; margin-bottom: 0.5rem;">❄️ Instrucciones</p>
+            <p style="color: #1e3a8a; font-size: 0.875rem;">
+                Registre aquí los datos de cada servicio o cámara frigorífica. 
+                Incluya información sobre refrigerante, temperatura, volumen y equipamiento de seguridad.
+            </p>
+        </div>
+
+        <button class="add-equipment-btn" onclick="agregarServicio()">
+            ➕ Añadir Servicio / Cámara
+        </button>
+
+        <div id="serviciosContainer">
+            <!-- Los servicios se cargarán dinámicamente -->
+            <div style="background: linear-gradient(135deg, #f9fafb, #ffffff); border: 2px solid #e5e7eb; border-radius: 1rem; padding: 3rem; text-align: center;">
+                <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.5;">❄️</div>
+                <h3 style="color: #1f2937; font-size: 1.5rem; margin-bottom: 1rem;">No hay servicios registrados</h3>
+                <p style="color: #6b7280; margin-bottom: 2rem;">
+                    Haga clic en el botón "Añadir Servicio / Cámara" para comenzar a registrar servicios.
+                </p>
+            </div>
+        </div>
+
+        <div class="form-section" style="margin-top: 2rem;">
+            <div class="form-section-title">📋 Ejemplo de Servicio</div>
+            <p style="color: #6b7280; margin-bottom: 1rem; font-size: 0.875rem;">
+                Cada servicio/cámara contendrá los siguientes datos:
+            </p>
+            
+            <div style="background: white; border: 2px solid #e5e7eb; border-radius: 0.75rem; padding: 1.5rem;">
+                <div class="form-row">
+                    <div class="form-col">
+                        <label class="form-label">ID Cámara</label>
+                        <input type="text" class="form-input" placeholder="Ej: CAM-01" disabled>
+                    </div>
+                    <div class="form-col">
+                        <label class="form-label">Volumen aproximado</label>
+                        <input type="text" class="form-input" placeholder="Ej: 10x8x4" disabled>
+                    </div>
+                    <div class="form-col">
+                        <label class="form-label">Refrigerante</label>
+                        <input type="text" class="form-input" placeholder="Ej: R404A" disabled>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-col">
+                        <label class="form-label">Temperatura regulación</label>
+                        <input type="text" class="form-input" placeholder="Ej: -25ºC" disabled>
+                    </div>
+                    <div class="form-col">
+                        <label class="form-label">Registrador temp. (E03)</label>
+                        <input type="text" class="form-input" placeholder="SI/NO" disabled>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #e5e7eb;">
+                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 1rem;">Equipamiento de Seguridad</div>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label class="form-label">Detector de fugas (E06)</label>
+                            <select class="form-input" disabled>
+                                <option>Seleccionar...</option>
+                                <option>SI</option>
+                                <option>NO</option>
+                            </select>
+                        </div>
+                        <div class="form-col">
+                            <label class="form-label">Hacha (Mango largo) (E09)</label>
+                            <select class="form-input" disabled>
+                                <option>Seleccionar...</option>
+                                <option>SI</option>
+                                <option>NO</option>
+                            </select>
+                        </div>
+                        <div class="form-col">
+                            <label class="form-label">Dispositivo de llamada</label>
+                            <select class="form-input" disabled>
+                                <option>Seleccionar...</option>
+                                <option>Simple</option>
+                                <option>Doble</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.75rem; padding: 1rem; margin-top: 2rem;">
+            <p style="color: #92400e; font-weight: 600; margin-bottom: 0.5rem;">💡 Información</p>
+            <p style="color: #92400e; font-size: 0.875rem;">
+                Los servicios se gestionarán dinámicamente a través del sistema JavaScript. 
+                Cada servicio puede ser editado o eliminado individualmente desde el menú lateral.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        function agregarServicio() {
+            alert('Esta funcionalidad se activará cuando se integre con el sistema JavaScript completo.');
+        }
+    </script>
+</body>
+</html>

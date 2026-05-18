@@ -1,0 +1,248 @@
+/**
+ * ============================================================================
+ * CLAUGER - Sistema de Informes Técnicos
+ * ============================================================================
+ * Archivo: equipment.css
+ * Descripción: Estilos para gestión de equipos, válvulas y componentes
+ * Versión: 1.1
+ * ============================================================================
+ */
+
+/* ============================================================================
+   BOTÓN DE AÑADIR EQUIPO
+   ============================================================================ */
+.add-equipment-btn {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border: none;
+    padding: 1rem 2rem;
+    border-radius: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1.5rem auto;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    transition: all 0.2s;
+}
+
+.add-equipment-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+}
+
+/* ============================================================================
+   LISTA Y TARJETAS DE EQUIPOS
+   ============================================================================ */
+.equipment-list {
+    margin-top: 1.5rem;
+}
+
+.equipment-item {
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.75rem;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+
+.equipment-item:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.equipment-header {
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    padding: 1rem 1.5rem;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.equipment-header-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.equipment-header-controls {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.equipment-toggle {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.equipment-remove-btn {
+    background: rgba(239, 68, 68, 0.9);
+    border: none;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.equipment-content {
+    padding: 2rem;
+    display: none;
+    background: #fafbfc;
+}
+
+.equipment-content.show {
+    display: block;
+}
+
+/* ============================================================================
+   COMPONENTES Y GRID
+   ============================================================================ */
+.component-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    border: none;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+    min-height: 45px;
+}
+
+.component-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.components-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+}
+
+/* ============================================================================
+   VÁLVULAS DE SEGURIDAD
+   ============================================================================ */
+.vs-section {
+    background: #f0f9ff;
+    border: 2px solid #bae6fd;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.add-vs-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+}
+
+.vs-unit {
+    background: white;
+    border: 2px solid #cbd5e1;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-top: 1rem;
+}
+
+.remove-vs-btn {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* ============================================================================
+   SECCIONES LADO A Y LADO B
+   ============================================================================ */
+.lado-section {
+    background: #fef3c7;
+    border: 2px solid #fde68a;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-top: 1rem;
+}
+
+.lado-section.lado-b {
+    background: #e0e7ff;
+    border-color: #c7d2fe;
+}
+
+/* ============================================================================
+   PRESOSTATO
+   ============================================================================ */
+.presostato-section {
+    background: #fce7f3;
+    border: 2px solid #fbcfe8;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+/* ============================================================================
+   VERIFICACIÓN - TARJETAS
+   ============================================================================ */
+.verification-card {
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.verification-header {
+    background: linear-gradient(135deg, #10b981, #059669);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    color: white;
+    margin-bottom: 1.5rem;
+}
+
+/* ============================================================================
+   RESPONSIVE - EQUIPOS
+   ============================================================================ */
+@media (max-width: 1024px) {
+    .components-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .components-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
