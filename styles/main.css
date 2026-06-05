@@ -351,20 +351,16 @@ html {
 /* ============================================================================
    RESPONSIVE - TABLET
    ============================================================================ */
-@media (max-width: 480px) {
+@media (max-width: 700px) {
     .main-container {
         flex-direction: column;
+        height: auto;
+        min-height: calc(100dvh - 130px);
     }
 
     .sidebar {
         width: 100%;
-        max-height: 30vh;
-    }
-}
-
-@media (min-width: 481px) and (max-width: 900px) {
-    .sidebar {
-        width: 200px;
-        min-width: 200px;
+        max-height: 35vh;
+        overflow-y: auto;
     }
 }
