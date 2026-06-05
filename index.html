@@ -356,8 +356,7 @@
                     'vvH: ' + (vv ? Math.round(vv.height) : 'n/a');
             }
             _updateDbg();
-            window.addEventListener('resize', _updateDbg);
-            window.addEventListener('orientationchange', () => setTimeout(_updateDbg, 300));
+            setInterval(_updateDbg, 1000);
 
 
             // Forzar pantalla completa al tocar (necesario en Android)
