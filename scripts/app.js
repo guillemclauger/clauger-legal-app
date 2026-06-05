@@ -37,6 +37,9 @@ const App = {
                     console.log(`⏭️ Saltando sección ${section.id} (solo legal)`);
                     return;
                 }
+                if (section.technicalOnly && AppState.isLegalMode) {
+                    return;
+                }
                 
                 const sectionId = `${pageKey}_${section.id}`;
                 if (!AppState.sectionsData[sectionId]) AppState.sectionsData[sectionId] = {};
@@ -719,6 +722,7 @@ const App = {
                     console.log(`⏭️ Ocultando sección ${section.id} en sidebar (solo legal)`);
                     return;
                 }
+                if (section.technicalOnly && AppState.isLegalMode) return;
                 
                 const sectionId = `${AppState.currentPage}_${section.id}`;
                 const btn = document.createElement('button');
@@ -1601,6 +1605,7 @@ const App = {
 
         workspace.querySelectorAll('.form-input[data-field]').forEach(input => {
             const saveFieldValue = (e) => {
+                if (!AppState.sectionsData[AppState.currentSection]) AppState.sectionsData[AppState.currentSection] = {};
                 AppState.sectionsData[AppState.currentSection][e.target.dataset.field] = e.target.value;
 
                 // Auto-relleno Datos de Delegación
@@ -3763,15 +3768,15 @@ www.clauger.com`;
         a.href = URL.createObjectURL(blob);
         let filename;
         if (AppState.isLegalMode) {
-            const _inf = AppState.sectionsData['datos_datos_informe'] || {};
+            const _inst = AppState.sectionsData['datos_datos_instalacion'] || {};
             const _rev = AppState.sectionsData['datos_datos_revision'] || {};
             const _cert = AppState.sectionsData['datos_datos_certificado'] || {};
             const _fRev = _rev['FECHA REVISIÓN'] || '';
             const _ano = (_fRev.match(/\d{4}/) || [new Date().getFullYear()])[0];
-            const _sis = (_inf['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
+            const _sis = (_inst['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
             const _dMap = {'Favorable (Sin defectos)':'F','Favorable (Defectos leves)':'FDL','Desfavorable':'D','Negativa':'N','Condicionado':'C','Comunicación deficiencias':'CD'};
             const _dIni = _dMap[_cert['DICTAMEN']] || ((_cert['DICTAMEN']||'SIN_DICTAMEN').replace(/[\s()]+/g,'_'));
-            const _nRev = (_inf['NÚMERO REVISIÓN'] || '').trim().replace(/\s+/g, '_') || 'SIN_REV';
+            const _nRev = (_cert['NÚMERO REVISIÓN'] || '').trim().replace(/\s+/g, '_') || 'SIN_REV';
             filename = `${_ano}_Legal_${_sis}_${_dIni}_${_nRev}.json`;
         } else {
             const informe = AppState.sectionsData['datos_datos_informe'] || {};
@@ -3929,7 +3934,7 @@ www.clauger.com`;
             const instalacion = AppState.sectionsData['datos_datos_instalacion'] || {};
             const revision    = AppState.sectionsData['datos_datos_revision']    || {};
             const certificado = AppState.sectionsData['datos_datos_certificado'] || {};
-            const informe     = AppState.sectionsData['datos_datos_informe']     || {};
+            const informe     = AppState.sectionsData['datos_datos_instalacion']  || {};
 
             const checklistItems  = [];
             const itemsConImagenes = [];
@@ -4188,7 +4193,7 @@ www.clauger.com`;
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>${(()=>{const _f=revision['FECHA REVISIÓN']||'';const _y=(_f.match(/\d{4}/)||[new Date().getFullYear()])[0];const _d=(certificado['DICTAMEN']||'ACTA').toUpperCase().replace(/[()]/g,'').replace(/\s+/g,' ').trim();const _s=(informe['SISTEMA']||'SIN_SISTEMA').trim();const _n=(informe['NÚMERO REVISIÓN']||'SIN_REV').trim();return `${_y}_${_d}_${_s}_${_n}`;})()}</title>
+<title>${(()=>{const _f=revision['FECHA REVISIÓN']||'';const _y=(_f.match(/\d{4}/)||[new Date().getFullYear()])[0];const _d=(certificado['DICTAMEN']||'ACTA').toUpperCase().replace(/[()]/g,'').replace(/\s+/g,' ').trim();const _s=(informe['SISTEMA']||'SIN_SISTEMA').trim();const _n=(certificado['NÚMERO REVISIÓN']||'SIN_REV').trim();return `${_y}_${_d}_${_s}_${_n}`;})()}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
 body{font-family:'Calibri Light',Calibri,'Trebuchet MS',Arial,sans-serif;font-size:10pt;color:#1a1a1a;background:#e8e8e8;font-weight:300}
@@ -4563,7 +4568,7 @@ ${(() => {
             const instalacion = AppState.sectionsData['datos_datos_instalacion'] || {};
             const revision    = AppState.sectionsData['datos_datos_revision']    || {};
             const certificadoIF = AppState.sectionsData['datos_datos_certificado'] || {};
-            const informeIF     = AppState.sectionsData['datos_datos_informe']     || {};
+            const informeIF     = AppState.sectionsData['datos_datos_instalacion'] || {};
 
             const defaults = this._getPortadaDefaults();
             const pd = AppState.portadaData;
