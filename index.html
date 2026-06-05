@@ -345,6 +345,19 @@
                 setTimeout(_checkOrientation, 200);
             });
 
+            // Forzar pantalla completa al tocar (necesario en Android)
+            function _requestFullscreen() {
+                const el = document.documentElement;
+                if (el.requestFullscreen) el.requestFullscreen();
+                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+            }
+            document.addEventListener('click', function _fsOnce() {
+                _requestFullscreen();
+                document.removeEventListener('click', _fsOnce);
+            }, { once: true });
+            // Intentar directamente sin gesto si el navegador lo permite
+            setTimeout(_requestFullscreen, 500);
+
             // Intentar bloquear en landscape (funciona en fullscreen PWA)
             if (screen.orientation && screen.orientation.lock) {
                 screen.orientation.lock('landscape-primary').catch(() => {});
