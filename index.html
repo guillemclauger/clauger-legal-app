@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>CLAUGER - Sistema de Informes Técnicos</title>
     <meta name="theme-color" content="#1a2744">
     <link rel="manifest" href="manifest.json">
@@ -18,6 +18,15 @@
     <link rel="stylesheet" href="styles/photos.css">
 </head>
 <body>
+    <!-- ============================================ -->
+    <!-- OVERLAY: GIRAR DISPOSITIVO                   -->
+    <!-- ============================================ -->
+    <div id="rotateOverlay" style="display:none;position:fixed;inset:0;z-index:999999;background:#1a2744;color:#fff;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;text-align:center;padding:2rem">
+        <div style="font-size:4rem;margin-bottom:1rem">🔄</div>
+        <div style="font-size:1.4rem;font-weight:700;margin-bottom:0.5rem">Gira el dispositivo</div>
+        <div style="font-size:1rem;opacity:0.75">Esta aplicación requiere modo horizontal</div>
+    </div>
+
     <!-- ============================================ -->
     <!-- LOGIN SCREEN                                  -->
     <!-- ============================================ -->
@@ -319,6 +328,27 @@
             });
             
             console.log('✅ Event listeners configurados');
+
+            // ========================================
+            // ORIENTACIÓN HORIZONTAL
+            // ========================================
+            function _checkOrientation() {
+                const isPortrait = window.innerHeight > window.innerWidth;
+                document.getElementById('rotateOverlay').style.display = isPortrait ? 'flex' : 'none';
+                // Forzar recálculo del viewport en Android al rotar
+                document.documentElement.style.setProperty('--vh', window.innerHeight + 'px');
+                document.documentElement.style.setProperty('--vw', window.innerWidth + 'px');
+            }
+            _checkOrientation();
+            window.addEventListener('resize', _checkOrientation);
+            window.addEventListener('orientationchange', () => {
+                setTimeout(_checkOrientation, 200);
+            });
+
+            // Intentar bloquear en landscape (funciona en fullscreen PWA)
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape-primary').catch(() => {});
+            }
 
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('./service-worker.js')
