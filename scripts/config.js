@@ -107,12 +107,24 @@ const PAGES_CONFIG = {
                 name: "Datos de Delegación",
                 icon: "🏢",
                 type: "form",
+                legalOnly: true,
                 fields: [
-                    {name: "DELEGACIÓN", type: "text"},
+                    {name: "DELEGACIÓN", type: "select", options: ["", "A CORUÑA", "BARCELONA", "HUELVA", "MADRID", "MÁLAGA", "MURCIA", "VALLADOLID", "VALENCIA", "VIGO", "ZARAGOZA"]},
                     {name: "DIRECCIÓN", type: "text"},
                     {name: "POBLACIÓN", type: "text"},
                     {name: "C.P.", type: "text"},
                     {name: "PROVINCIA", type: "text"}
+                ]
+            },
+            {
+                id: "datos_informe",
+                name: "Datos del Informe",
+                icon: "📝",
+                type: "form",
+                fields: [
+                    {name: "SISTEMA", type: "text"},
+                    {name: "CIF", type: "text"},
+                    {name: "NÚMERO REVISIÓN", type: "text"}
                 ]
             },
             {
@@ -174,8 +186,6 @@ const PAGES_CONFIG = {
                 legalOnly: true,
                 fields: [
                     {name: "TIPO DE ACTA", type: "select", options: ["", "CERTIFICADO DE REVISIÓN PERIÓDICA", "INFORME TÉCNICO / LEGAL"]},
-                    {name: "ID INFORME", type: "text"},
-                    {name: "REVISIÓN", type: "text"},
                     {name: "DICTAMEN", type: "select", options: ["", "Favorable (Sin defectos)", "Favorable (Defectos leves)", "Desfavorable", "Negativa", "Condicionado", "Comunicación deficiencias"]},
                     {name: "FECHA LÍMITE CORRECCIÓN", type: "text"},
                     {name: "COMENTARIOS", type: "textarea", rows: 6, readonly: true, fullWidth: true}
