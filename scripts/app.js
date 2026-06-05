@@ -109,13 +109,7 @@ const App = {
     },
 
     _updateAutosaveBadge() {
-        const el = document.getElementById('autosaveBadge');
-        if (!el) return;
-        const t = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        el.textContent = '💾 ' + t;
-        el.style.opacity = '1';
-        clearTimeout(this._badgeFadeTimer);
-        this._badgeFadeTimer = setTimeout(() => { el.style.opacity = '0.4'; }, 3000);
+        // Badge oculto visualmente, autoguardado sigue funcionando
     },
 
     _getAutosave() {
@@ -317,19 +311,25 @@ const App = {
                                 {name: 'Indicador Descarga PSV', type: 'select', path: `${basePath}.items.${vIdx}.indicadorDescarga`, options: ['', 'Sifón', 'Luz', 'No']}
                             ], [valv.marca, valv.modelo, valv.indicadorDescarga], dataAttr)}
                         </div>
+                        <div style="font-size:0.75rem;font-weight:700;color:#92400e;text-transform:uppercase;margin:0.5rem 0 0.25rem">PSV Existente</div>
                         <div class="form-row">
                             ${this.createFormFields([
                                 {name: 'Nº serie Existente', path: `${basePath}.items.${vIdx}.serieExistente`},
                                 {name: 'Fecha', type: 'text', path: `${basePath}.items.${vIdx}.fechaExistente`},
-                                {name: 'Presión tarado (bar)', path: `${basePath}.items.${vIdx}.presionExistente`}
-                            ], [valv.serieExistente, valv.fechaExistente, valv.presionExistente], dataAttr)}
+                                {name: 'Presión tarado (bar)', path: `${basePath}.items.${vIdx}.presionExistente`},
+                                {name: 'DN entrada', path: `${basePath}.items.${vIdx}.dnEntradaExistente`},
+                                {name: 'DN salida', path: `${basePath}.items.${vIdx}.dnSalidaExistente`}
+                            ], [valv.serieExistente, valv.fechaExistente, valv.presionExistente, valv.dnEntradaExistente||'', valv.dnSalidaExistente||''], dataAttr)}
                         </div>
+                        <div style="font-size:0.75rem;font-weight:700;color:#92400e;text-transform:uppercase;margin:0.5rem 0 0.25rem">PSV Nueva</div>
                         <div class="form-row">
                             ${this.createFormFields([
                                 {name: 'Nº serie Nueva', path: `${basePath}.items.${vIdx}.serieNueva`},
                                 {name: 'Fecha', type: 'text', path: `${basePath}.items.${vIdx}.fechaNueva`},
-                                {name: 'Presión tarado (bar)', path: `${basePath}.items.${vIdx}.presionNueva`}
-                            ], [valv.serieNueva, valv.fechaNueva, valv.presionNueva], dataAttr)}
+                                {name: 'Presión tarado (bar)', path: `${basePath}.items.${vIdx}.presionNueva`},
+                                {name: 'DN entrada', path: `${basePath}.items.${vIdx}.dnEntradaNueva`},
+                                {name: 'DN salida', path: `${basePath}.items.${vIdx}.dnSalidaNueva`}
+                            ], [valv.serieNueva, valv.fechaNueva, valv.presionNueva, valv.dnEntradaNueva||'', valv.dnSalidaNueva||''], dataAttr)}
                         </div>
                     </div>
                 `).join('')}
@@ -459,7 +459,7 @@ const App = {
         
         if (action === 'add') {
             if (!equipment[valvKey]) equipment[valvKey] = {items: []};
-            equipment[valvKey].items.push({marca: '', modelo: '', indicadorDescarga: '', serieExistente: '', fechaExistente: '', presionExistente: '', serieNueva: '', fechaNueva: '', presionNueva: ''});
+            equipment[valvKey].items.push({marca: '', modelo: '', indicadorDescarga: '', serieExistente: '', fechaExistente: '', presionExistente: '', dnEntradaExistente: '', dnSalidaExistente: '', serieNueva: '', fechaNueva: '', presionNueva: '', dnEntradaNueva: '', dnSalidaNueva: ''});
             this.showToast('✔️ Válvula añadida', 'success');
         } else if (action === 'remove' && confirm('¿Eliminar esta válvula?')) {
             equipment[valvKey].items.splice(valvIdx, 1);
@@ -1602,6 +1602,31 @@ const App = {
         workspace.querySelectorAll('.form-input[data-field]').forEach(input => {
             const saveFieldValue = (e) => {
                 AppState.sectionsData[AppState.currentSection][e.target.dataset.field] = e.target.value;
+
+                // Auto-relleno Datos de Delegación
+                if (e.target.dataset.field === 'DELEGACIÓN') {
+                    const DELEGACIONES = {
+                        'A CORUÑA':    {DIRECCIÓN: 'Dársena de Oza, local nº2',               POBLACIÓN: 'A Coruña',      'C.P.': '15006', PROVINCIA: 'A Coruña'},
+                        'BARCELONA':   {DIRECCIÓN: 'C/ Acústica 16 PI Santa Rita',             POBLACIÓN: 'Castellbisbal', 'C.P.': '08755', PROVINCIA: 'Barcelona'},
+                        'HUELVA':      {DIRECCIÓN: 'Avda de la Ría Edif. Insur 2ª Planta',    POBLACIÓN: 'Huelva',        'C.P.': '21001', PROVINCIA: 'Huelva'},
+                        'MADRID':      {DIRECCIÓN: 'C/ Edison 47 2ª 4ª',                       POBLACIÓN: 'Getafe',        'C.P.': '28906', PROVINCIA: 'Madrid'},
+                        'MÁLAGA':      {DIRECCIÓN: 'C/ Luis F Pallardo',                       POBLACIÓN: 'Málaga',        'C.P.': '29007', PROVINCIA: 'Málaga'},
+                        'MURCIA':      {DIRECCIÓN: 'C/ Alcalde Clemente Garcia 19',            POBLACIÓN: 'San Ginés',     'C.P.': '30169', PROVINCIA: 'Murcia'},
+                        'VALLADOLID':  {DIRECCIÓN: 'C/ Cobalto 32 Nave 8',                    POBLACIÓN: 'Valladolid',    'C.P.': '47012', PROVINCIA: 'Valladolid'},
+                        'VALENCIA':    {DIRECCIÓN: 'Calle C 2B Parque Empresarial Táctica',   POBLACIÓN: 'Paterna',       'C.P.': '46980', PROVINCIA: 'Valencia'},
+                        'VIGO':        {DIRECCIÓN: 'C/ C Nave D8',                             POBLACIÓN: 'Vigo',          'C.P.': '36315', PROVINCIA: 'Vigo'},
+                        'ZARAGOZA':    {DIRECCIÓN: 'Pablo Ruiz Picasso 5',                     POBLACIÓN: 'Zaragoza',      'C.P.': '50015', PROVINCIA: 'Zaragoza'}
+                    };
+                    const datos = DELEGACIONES[e.target.value];
+                    if (datos) {
+                        const sec = AppState.sectionsData[AppState.currentSection];
+                        Object.assign(sec, datos);
+                        ['DIRECCIÓN', 'POBLACIÓN', 'C.P.', 'PROVINCIA'].forEach(field => {
+                            const el = workspace.querySelector(`.form-input[data-field="${field}"]`);
+                            if (el) el.value = datos[field];
+                        });
+                    }
+                }
 
                 // Lógica especial para DICTAMEN - actualizar COMENTARIOS automáticamente
                 if (e.target.dataset.field === 'DICTAMEN') {
@@ -3325,39 +3350,40 @@ www.clauger.com`;
                     ${this.createFormFields([
                         {name: 'Fabricante', path: `${subType}.${subIdx}.fabricante`},
                         {name: 'Modelo', path: `${subType}.${subIdx}.modelo`},
-                        {name: 'Nº Serie', path: `${subType}.${subIdx}.numSerie`}
-                    ], [subEquip.fabricante, subEquip.modelo, subEquip.numSerie], 'data-subfield')}
+                        {name: 'Nº Serie', path: `${subType}.${subIdx}.numSerie`},
+                        ...(AppState.isLegalMode ? [{name: 'Categoría', type: 'select', path: `${subType}.${subIdx}.categoria`, options: ['', 'I', 'II', 'III', 'IV', '-']}] : [])
+                    ], [subEquip.fabricante, subEquip.modelo, subEquip.numSerie, ...(AppState.isLegalMode ? [subEquip.categoria||''] : [])], 'data-subfield')}
                 </div>
                 ${template === 'plantilla2' ? `
                 <div class="form-row">
                     ${this.createFormFields([
                         {name: 'Nº Placa Industria', path: `${subType}.${subIdx}.numPlaca`},
                         {name: 'Fecha Fabricación', path: `${subType}.${subIdx}.fechaFabricacion`},
-                        ...(AppState.isLegalMode ? [{name: 'Normativa', type: 'select', path: `${subType}.${subIdx}.normativa`, options: ['', 'RD3099/1977', 'RD138/2011', 'RD552/2019']}] : [{name: 'Ubicación', path: `${subType}.${subIdx}.ubicacion`}])
-                    ], [subEquip.numPlaca, subEquip.fechaFabricacion, AppState.isLegalMode ? (subEquip.normativa||'') : subEquip.ubicacion], 'data-subfield')}
+                        {name: 'Ubicación', path: `${subType}.${subIdx}.ubicacion`},
+                        ...(AppState.isLegalMode ? [{name: 'Normativa', type: 'select', path: `${subType}.${subIdx}.normativa`, options: ['', 'RD3099/1977', 'RD138/2011', 'RD552/2019']}] : [])
+                    ], [subEquip.numPlaca, subEquip.fechaFabricacion, subEquip.ubicacion, ...(AppState.isLegalMode ? [subEquip.normativa||''] : [])], 'data-subfield')}
                 </div>
-                ${AppState.isLegalMode ? `<div class="form-row">
-                    ${this.createFormFields([
-                        {name: 'Ubicación', path: `${subType}.${subIdx}.ubicacion`}
-                    ], [subEquip.ubicacion], 'data-subfield')}
-                </div>` : ''}
-                <div class="form-row">
-                    ${this.createFormFields([
-                        {name: 'Fluido A', type: 'select', path: `${subType}.${subIdx}.fluidoA`, options: this._getFluidOptions()},
-                        {name: 'Fluido B', type: 'select', path: `${subType}.${subIdx}.fluidoB`, options: this._getFluidOptions()}
-                    ], [subEquip.fluidoA||'', subEquip.fluidoB||''], 'data-subfield')}
+                <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:0.5rem;padding:0.75rem;margin-bottom:0.75rem">
+                    <div style="font-size:0.75rem;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:0.5rem">🟠 Lado A</div>
+                    <div class="form-row">
+                        ${this.createFormFields([
+                            {name: 'Fluido A', type: 'select', path: `${subType}.${subIdx}.fluidoA`, options: this._getFluidOptions()},
+                            {name: 'Volumen Interno (Lts) A', path: `${subType}.${subIdx}.volInternoA`},
+                            {name: 'Presión Max (bar) A', path: `${subType}.${subIdx}.presionMaxA`},
+                            {name: 'Presión Min (bar) A', path: `${subType}.${subIdx}.presionMinA`}
+                        ], [subEquip.fluidoA||'', subEquip.volInternoA||'', subEquip.presionMaxA||'', subEquip.presionMinA||''], 'data-subfield')}
+                    </div>
                 </div>
-                <div class="form-row">
-                    ${this.createFormFields([
-                        {name: 'Volumen Interno (Lts) A', path: `${subType}.${subIdx}.volInternoA`},
-                        {name: 'Volumen Interno (Lts) B', path: `${subType}.${subIdx}.volInternoB`}
-                    ], [subEquip.volInternoA||'', subEquip.volInternoB||''], 'data-subfield')}
-                </div>
-                <div class="form-row">
-                    ${this.createFormFields([
-                        {name: 'Presión Max/Min (bar) A', path: `${subType}.${subIdx}.presionA`},
-                        {name: 'Presión Max/Min (bar) B', path: `${subType}.${subIdx}.presionB`}
-                    ], [subEquip.presionA||'', subEquip.presionB||''], 'data-subfield')}
+                <div style="background:#e0e7ff;border:1px solid #c7d2fe;border-radius:0.5rem;padding:0.75rem;margin-bottom:0.75rem">
+                    <div style="font-size:0.75rem;font-weight:700;color:#3730a3;text-transform:uppercase;margin-bottom:0.5rem">🟡 Lado B</div>
+                    <div class="form-row">
+                        ${this.createFormFields([
+                            {name: 'Fluido B', type: 'select', path: `${subType}.${subIdx}.fluidoB`, options: this._getFluidOptions()},
+                            {name: 'Volumen Interno (Lts) B', path: `${subType}.${subIdx}.volInternoB`},
+                            {name: 'Presión Max (bar) B', path: `${subType}.${subIdx}.presionMaxB`},
+                            {name: 'Presión Min (bar) B', path: `${subType}.${subIdx}.presionMinB`}
+                        ], [subEquip.fluidoB||'', subEquip.volInternoB||'', subEquip.presionMaxB||'', subEquip.presionMinB||''], 'data-subfield')}
+                    </div>
                 </div>` : `
                 <div class="form-row">
                     ${this.createFormFields([
@@ -3370,8 +3396,9 @@ www.clauger.com`;
                     ${this.createFormFields([
                         {name: 'Fluido', type: 'select', path: `${subType}.${subIdx}.fluido`, options: this._getFluidOptions()},
                         {name: 'Vol. Interno (Lts)', path: `${subType}.${subIdx}.volInterno`},
-                        {name: 'Presión Max/Min (bar)', path: `${subType}.${subIdx}.presion`}
-                    ], [subEquip.fluido, subEquip.volInterno, subEquip.presion], 'data-subfield')}
+                        {name: 'Presión Max (bar)', path: `${subType}.${subIdx}.presionMax`},
+                        {name: 'Presión Min (bar)', path: `${subType}.${subIdx}.presionMin`}
+                    ], [subEquip.fluido, subEquip.volInterno, subEquip.presionMax||'', subEquip.presionMin||''], 'data-subfield')}
                 </div>
                 <div class="form-row">
                     ${this.createFormFields([
@@ -3381,9 +3408,10 @@ www.clauger.com`;
                 <div class="form-row">
                     ${this.createFormFields([
                         {name: 'Vol. Interno (Lts)', path: `${subType}.${subIdx}.volInterno`},
-                        {name: 'Presión Max/Min (bar)', path: `${subType}.${subIdx}.presion`},
+                        {name: 'Presión Max (bar)', path: `${subType}.${subIdx}.presionMax`},
+                        {name: 'Presión Min (bar)', path: `${subType}.${subIdx}.presionMin`},
                         {name: 'Ubicación', path: `${subType}.${subIdx}.ubicacion`}
-                    ], [subEquip.volInterno, subEquip.presion, subEquip.ubicacion], 'data-subfield')}
+                    ], [subEquip.volInterno, subEquip.presionMax||'', subEquip.presionMin||'', subEquip.ubicacion], 'data-subfield')}
                 </div>`}`}
                 ${template === 'plantilla1' 
                     ? this.renderValvulas(subEquip.valvulas, context, 'single')
@@ -3421,7 +3449,7 @@ www.clauger.com`;
         const isIntercambiador = subType.includes('Enfriador Aceite');
         const newSubEquip = {
             fabricante: '', modelo: '', numSerie: '', numPlaca: '', fechaFabricacion: '',
-            normativa: '', ubicacion: '', observaciones: '',
+            normativa: '', ubicacion: '', categoria: '', observaciones: '',
             photos: {placa: null, general: null},
             imagenes: []
         };
@@ -3429,11 +3457,13 @@ www.clauger.com`;
         if (isIntercambiador) {
             newSubEquip.fluidoA = ''; newSubEquip.fluidoB = '';
             newSubEquip.volInternoA = ''; newSubEquip.volInternoB = '';
-            newSubEquip.presionA = ''; newSubEquip.presionB = '';
+            newSubEquip.presionMaxA = ''; newSubEquip.presionMinA = '';
+            newSubEquip.presionMaxB = ''; newSubEquip.presionMinB = '';
             newSubEquip.valvulasA = {items: []};
             newSubEquip.valvulasB = {items: []};
         } else {
-            newSubEquip.fluido = ''; newSubEquip.volInterno = ''; newSubEquip.presion = '';
+            newSubEquip.fluido = ''; newSubEquip.volInterno = '';
+            newSubEquip.presionMax = ''; newSubEquip.presionMin = '';
             newSubEquip.valvulas = {items: []};
         }
         
@@ -3490,39 +3520,40 @@ www.clauger.com`;
                                 ${this.createFormFields([
                                     {name: 'Fabricante', path: 'fabricante'},
                                     {name: 'Modelo', path: 'modelo'},
-                                    {name: 'Nº Serie', path: 'numSerie'}
-                                ], [equip.fabricante, equip.modelo, equip.numSerie])}
+                                    {name: 'Nº Serie', path: 'numSerie'},
+                                    ...(AppState.isLegalMode ? [{name: 'Categoría', type: 'select', path: 'categoria', options: ['', 'I', 'II', 'III', 'IV', '-']}] : [])
+                                ], [equip.fabricante, equip.modelo, equip.numSerie, ...(AppState.isLegalMode ? [equip.categoria||''] : [])])}
                             </div>
                             ${template === 'plantilla2' ? `
                             <div class="form-row">
                                 ${this.createFormFields([
                                     {name: 'Nº Placa Industria', path: 'numPlaca'},
                                     {name: 'Fecha Fabricación', path: 'fechaFabricacion'},
-                                    ...(AppState.isLegalMode ? [{name: 'Normativa', type: 'select', path: 'normativa', options: ['', 'RD3099/1977', 'RD138/2011', 'RD552/2019']}] : [{name: 'Ubicación', path: 'ubicacion'}])
-                                ], [equip.numPlaca, equip.fechaFabricacion, AppState.isLegalMode ? (equip.normativa||'') : equip.ubicacion])}
+                                    {name: 'Ubicación', path: 'ubicacion'},
+                                    ...(AppState.isLegalMode ? [{name: 'Normativa', type: 'select', path: 'normativa', options: ['', 'RD3099/1977', 'RD138/2011', 'RD552/2019']}] : [])
+                                ], [equip.numPlaca, equip.fechaFabricacion, equip.ubicacion, ...(AppState.isLegalMode ? [equip.normativa||''] : [])])}
                             </div>
-                            ${AppState.isLegalMode ? `<div class="form-row">
-                                ${this.createFormFields([
-                                    {name: 'Ubicación', path: 'ubicacion'}
-                                ], [equip.ubicacion])}
-                            </div>` : ''}
-                            <div class="form-row">
-                                ${this.createFormFields([
-                                    {name: 'Fluido A', type: 'select', path: 'fluidoA', options: this._getFluidOptions()},
-                                    {name: 'Fluido B', type: 'select', path: 'fluidoB', options: this._getFluidOptions()}
-                                ], [equip.fluidoA||'', equip.fluidoB||''])}
+                            <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:0.5rem;padding:0.75rem;margin-bottom:0.75rem">
+                                <div style="font-size:0.75rem;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:0.5rem">🟠 Lado A</div>
+                                <div class="form-row">
+                                    ${this.createFormFields([
+                                        {name: 'Fluido A', type: 'select', path: 'fluidoA', options: this._getFluidOptions()},
+                                        {name: 'Volumen Interno (Lts) A', path: 'volInternoA'},
+                                        {name: 'Presión Max (bar) A', path: 'presionMaxA'},
+                                        {name: 'Presión Min (bar) A', path: 'presionMinA'}
+                                    ], [equip.fluidoA||'', equip.volInternoA||'', equip.presionMaxA||'', equip.presionMinA||''])}
+                                </div>
                             </div>
-                            <div class="form-row">
-                                ${this.createFormFields([
-                                    {name: 'Volumen Interno (Lts) A', path: 'volInternoA'},
-                                    {name: 'Volumen Interno (Lts) B', path: 'volInternoB'}
-                                ], [equip.volInternoA||'', equip.volInternoB||''])}
-                            </div>
-                            <div class="form-row">
-                                ${this.createFormFields([
-                                    {name: 'Presión Max/Min (bar) A', path: 'presionA'},
-                                    {name: 'Presión Max/Min (bar) B', path: 'presionB'}
-                                ], [equip.presionA||'', equip.presionB||''])}
+                            <div style="background:#e0e7ff;border:1px solid #c7d2fe;border-radius:0.5rem;padding:0.75rem;margin-bottom:0.75rem">
+                                <div style="font-size:0.75rem;font-weight:700;color:#3730a3;text-transform:uppercase;margin-bottom:0.5rem">🟡 Lado B</div>
+                                <div class="form-row">
+                                    ${this.createFormFields([
+                                        {name: 'Fluido B', type: 'select', path: 'fluidoB', options: this._getFluidOptions()},
+                                        {name: 'Volumen Interno (Lts) B', path: 'volInternoB'},
+                                        {name: 'Presión Max (bar) B', path: 'presionMaxB'},
+                                        {name: 'Presión Min (bar) B', path: 'presionMinB'}
+                                    ], [equip.fluidoB||'', equip.volInternoB||'', equip.presionMaxB||'', equip.presionMinB||''])}
+                                </div>
                             </div>` : `
                             <div class="form-row">
                                 ${this.createFormFields([
@@ -3535,8 +3566,9 @@ www.clauger.com`;
                                 ${this.createFormFields([
                                     {name: 'Fluido', type: 'select', path: 'fluido', options: this._getFluidOptions()},
                                     {name: 'Vol. Interno (Lts)', path: 'volInterno'},
-                                    {name: 'Presión Max/Min (bar)', path: 'presion'}
-                                ], [equip.fluido, equip.volInterno, equip.presion])}
+                                    {name: 'Presión Max (bar)', path: 'presionMax'},
+                                    {name: 'Presión Min (bar)', path: 'presionMin'}
+                                ], [equip.fluido, equip.volInterno, equip.presionMax||'', equip.presionMin||''])}
                             </div>
                             <div class="form-row">
                                 ${this.createFormFields([
@@ -3546,9 +3578,10 @@ www.clauger.com`;
                             <div class="form-row">
                                 ${this.createFormFields([
                                     {name: 'Vol. Interno (Lts)', path: 'volInterno'},
-                                    {name: 'Presión Max/Min (bar)', path: 'presion'},
+                                    {name: 'Presión Max (bar)', path: 'presionMax'},
+                                    {name: 'Presión Min (bar)', path: 'presionMin'},
                                     {name: 'Ubicación', path: 'ubicacion'}
-                                ], [equip.volInterno, equip.presion, equip.ubicacion])}
+                                ], [equip.volInterno, equip.presionMax||'', equip.presionMin||'', equip.ubicacion])}
                             </div>`}`}
                         </div>
                         ${template === 'plantilla1' 
@@ -3647,18 +3680,20 @@ www.clauger.com`;
         const typeData = EQUIPMENT_TYPES[AppState.currentEquipmentType];
         const newEquip = {
             fabricante: '', modelo: '', numSerie: '', numPlaca: '', fechaFabricacion: '',
-            normativa: '', ubicacion: '', observaciones: '',
+            normativa: '', ubicacion: '', categoria: '', observaciones: '',
             photos: {placa: null, general: null},
             imagenes: []
         };
 
         if (typeData.template === 'plantilla1') {
-            newEquip.fluido = ''; newEquip.volInterno = ''; newEquip.presion = '';
+            newEquip.fluido = ''; newEquip.volInterno = '';
+            newEquip.presionMax = ''; newEquip.presionMin = '';
             newEquip.valvulas = {items: []};
         } else if (typeData.template === 'plantilla2') {
             newEquip.fluidoA = ''; newEquip.fluidoB = '';
             newEquip.volInternoA = ''; newEquip.volInternoB = '';
-            newEquip.presionA = ''; newEquip.presionB = '';
+            newEquip.presionMaxA = ''; newEquip.presionMinA = '';
+            newEquip.presionMaxB = ''; newEquip.presionMinB = '';
             newEquip.valvulasA = {items: []};
             newEquip.valvulasB = {items: []};
         }
@@ -3726,8 +3761,25 @@ www.clauger.com`;
         const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        const modePrefix = AppState.isLegalMode ? 'LEGAL_' : 'TECNICO_';
-        a.download = `CLAUGER_${modePrefix}${new Date().toISOString().split('T')[0]}.json`;
+        let filename;
+        if (AppState.isLegalMode) {
+            const _inf = AppState.sectionsData['datos_datos_informe'] || {};
+            const _rev = AppState.sectionsData['datos_datos_revision'] || {};
+            const _cert = AppState.sectionsData['datos_datos_certificado'] || {};
+            const _fRev = _rev['FECHA REVISIÓN'] || '';
+            const _ano = (_fRev.match(/\d{4}/) || [new Date().getFullYear()])[0];
+            const _sis = (_inf['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
+            const _dMap = {'Favorable (Sin defectos)':'F','Favorable (Defectos leves)':'FDL','Desfavorable':'D','Negativa':'N','Condicionado':'C','Comunicación deficiencias':'CD'};
+            const _dIni = _dMap[_cert['DICTAMEN']] || ((_cert['DICTAMEN']||'SIN_DICTAMEN').replace(/[\s()]+/g,'_'));
+            const _nRev = (_inf['NÚMERO REVISIÓN'] || '').trim().replace(/\s+/g, '_') || 'SIN_REV';
+            filename = `${_ano}_Legal_${_sis}_${_dIni}_${_nRev}.json`;
+        } else {
+            const informe = AppState.sectionsData['datos_datos_informe'] || {};
+            const sistema = (informe['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
+            const numRev = (informe['NÚMERO REVISIÓN'] || '').trim().replace(/\s+/g, '_') || 'SIN_REV';
+            filename = `${new Date().getFullYear()}_Técnico_${sistema}_${numRev}.json`;
+        }
+        a.download = filename;
         a.click();
         this.showToast('💾 Datos exportados', 'success');
     },
@@ -3877,6 +3929,7 @@ www.clauger.com`;
             const instalacion = AppState.sectionsData['datos_datos_instalacion'] || {};
             const revision    = AppState.sectionsData['datos_datos_revision']    || {};
             const certificado = AppState.sectionsData['datos_datos_certificado'] || {};
+            const informe     = AppState.sectionsData['datos_datos_informe']     || {};
 
             const checklistItems  = [];
             const itemsConImagenes = [];
@@ -4135,7 +4188,7 @@ www.clauger.com`;
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>${certificado['TIPO DE ACTA'] || 'ACTA INICIAL'}</title>
+<title>${(()=>{const _f=revision['FECHA REVISIÓN']||'';const _y=(_f.match(/\d{4}/)||[new Date().getFullYear()])[0];const _d=(certificado['DICTAMEN']||'ACTA').toUpperCase().replace(/[()]/g,'').replace(/\s+/g,' ').trim();const _s=(informe['SISTEMA']||'SIN_SISTEMA').trim();const _n=(informe['NÚMERO REVISIÓN']||'SIN_REV').trim();return `${_y}_${_d}_${_s}_${_n}`;})()}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
 body{font-family:'Calibri Light',Calibri,'Trebuchet MS',Arial,sans-serif;font-size:10pt;color:#1a1a1a;background:#e8e8e8;font-weight:300}
@@ -4509,6 +4562,8 @@ ${(() => {
         try {
             const instalacion = AppState.sectionsData['datos_datos_instalacion'] || {};
             const revision    = AppState.sectionsData['datos_datos_revision']    || {};
+            const certificadoIF = AppState.sectionsData['datos_datos_certificado'] || {};
+            const informeIF     = AppState.sectionsData['datos_datos_informe']     || {};
 
             const defaults = this._getPortadaDefaults();
             const pd = AppState.portadaData;
@@ -4630,6 +4685,7 @@ ${(() => {
                         ['Fabricante', eq.fabricante],
                         ['Modelo', eq.modelo],
                         ['Nº Serie', eq.numSerie],
+                        ...(AppState.isLegalMode && eq.categoria ? [['Categoría', eq.categoria]] : []),
                         ['Nº Placa Industria', eq.numPlaca],
                         ['Fecha Fabricación', eq.fechaFabricacion],
                         ['Normativa', eq.normativa],
@@ -4637,19 +4693,23 @@ ${(() => {
                         ['Fluido Lado B', eq.fluidoB],
                         ['Volumen Interno (L) A', eq.volInternoA],
                         ['Volumen Interno (L) B', eq.volInternoB],
-                        ['Presión Máx/Mín (bar) A', eq.presionA],
-                        ['Presión Máx/Mín (bar) B', eq.presionB],
+                        ['Presión Max (bar) A', eq.presionMaxA],
+                        ['Presión Min (bar) A', eq.presionMinA],
+                        ['Presión Max (bar) B', eq.presionMaxB],
+                        ['Presión Min (bar) B', eq.presionMinB],
                         ['Ubicación', eq.ubicacion]
                     ] : [
                         ['Fabricante', eq.fabricante],
                         ['Modelo', eq.modelo],
                         ['Nº Serie', eq.numSerie],
+                        ...(AppState.isLegalMode && eq.categoria ? [['Categoría', eq.categoria]] : []),
                         ['Nº Placa Industria', eq.numPlaca],
                         ['Fecha Fabricación', eq.fechaFabricacion],
                         ['Normativa', eq.normativa],
                         ['Fluido', eq.fluido],
                         ['Volumen Interno (L)', eq.volInterno],
-                        ['Presión Máx/Mín (bar)', eq.presion],
+                        ['Presión Max (bar)', eq.presionMax],
+                        ['Presión Min (bar)', eq.presionMin],
                         ['Ubicación', eq.ubicacion],
                         ...(eq.presostato !== undefined ? [['Presostato AP', eq.presostato]] : [])
                     ];
@@ -4890,7 +4950,7 @@ ${(() => {
 
             // ── Full HTML ──────────────────────────────────────────────────────────
             const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>INFORME FINAL — ${pv('cliente')||'CLAUGER'}</title>
+<title>${(()=>{const _f=revision['FECHA REVISIÓN']||'';const _y=(_f.match(/\d{4}/)||[new Date().getFullYear()])[0];const _d=(certificadoIF['DICTAMEN']||'INFORME').toUpperCase().replace(/[()]/g,'').replace(/\s+/g,' ').trim();const _rawCif=(informeIF['CIF']||'').trim();const _cif=_rawCif?(/^CIF\s/i.test(_rawCif)?_rawCif:'CIF '+_rawCif):'SIN_CIF';return `${_y}_${_d}_${_cif}`;})()}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
 body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1a1a1a;background:#e8e8e8}
