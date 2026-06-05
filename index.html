@@ -335,6 +335,30 @@
             // Overlay de rotación desactivado — la PWA funciona en cualquier orientación
             document.getElementById('rotateOverlay').style.display = 'none';
 
+            // ========================================
+            // PANEL DE DIAGNÓSTICO (TEMPORAL)
+            // ========================================
+            const _dbg = document.createElement('div');
+            _dbg.id = 'debugPanel';
+            _dbg.style.cssText = 'position:fixed;top:0;left:0;z-index:9999999;background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:11px;padding:6px 8px;line-height:1.6;pointer-events:none';
+            document.body.appendChild(_dbg);
+            function _updateDbg() {
+                const vv = window.visualViewport;
+                _dbg.innerHTML =
+                    'innerW: ' + window.innerWidth + '<br>' +
+                    'innerH: ' + window.innerHeight + '<br>' +
+                    'screen.w: ' + screen.width + '<br>' +
+                    'screen.h: ' + screen.height + '<br>' +
+                    'clientW: ' + document.documentElement.clientWidth + '<br>' +
+                    'clientH: ' + document.documentElement.clientHeight + '<br>' +
+                    'orient: ' + (screen.orientation ? screen.orientation.type : 'n/a') + '<br>' +
+                    'vvW: ' + (vv ? Math.round(vv.width) : 'n/a') + '<br>' +
+                    'vvH: ' + (vv ? Math.round(vv.height) : 'n/a');
+            }
+            _updateDbg();
+            window.addEventListener('resize', _updateDbg);
+            window.addEventListener('orientationchange', () => setTimeout(_updateDbg, 300));
+
 
             // Forzar pantalla completa al tocar (necesario en Android)
             function _requestFullscreen() {
