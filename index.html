@@ -332,18 +332,8 @@
             // ========================================
             // ORIENTACIÓN HORIZONTAL
             // ========================================
-            function _checkOrientation() {
-                const isPortrait = window.innerHeight > window.innerWidth;
-                document.getElementById('rotateOverlay').style.display = isPortrait ? 'flex' : 'none';
-                // Forzar recálculo del viewport en Android al rotar
-                document.documentElement.style.setProperty('--vh', window.innerHeight + 'px');
-                document.documentElement.style.setProperty('--vw', window.innerWidth + 'px');
-            }
-            _checkOrientation();
-            window.addEventListener('resize', _checkOrientation);
-            window.addEventListener('orientationchange', () => {
-                setTimeout(_checkOrientation, 200);
-            });
+            // Overlay de rotación desactivado — la PWA funciona en cualquier orientación
+            document.getElementById('rotateOverlay').style.display = 'none';
 
             // Forzar pantalla completa al tocar (necesario en Android)
             function _requestFullscreen() {
