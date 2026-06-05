@@ -335,6 +335,19 @@
             // Overlay de rotación desactivado — la PWA funciona en cualquier orientación
             document.getElementById('rotateOverlay').style.display = 'none';
 
+            // Forzar viewport al ancho real de pantalla en Android landscape
+            function _fixViewport() {
+                const isLandscape = screen.width > screen.height;
+                const vp = document.querySelector('meta[name="viewport"]');
+                if (isLandscape && /Android/i.test(navigator.userAgent)) {
+                    vp.content = 'width=' + screen.width + ', initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+                } else {
+                    vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+                }
+            }
+            _fixViewport();
+            window.addEventListener('orientationchange', () => setTimeout(_fixViewport, 200));
+
             // Forzar pantalla completa al tocar (necesario en Android)
             function _requestFullscreen() {
                 const el = document.documentElement;
