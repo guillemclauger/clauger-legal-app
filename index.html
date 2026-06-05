@@ -335,28 +335,6 @@
             // Overlay de rotación desactivado — la PWA funciona en cualquier orientación
             document.getElementById('rotateOverlay').style.display = 'none';
 
-            // ========================================
-            // PANEL DE DIAGNÓSTICO (TEMPORAL)
-            // ========================================
-            const _dbg = document.createElement('div');
-            _dbg.id = 'debugPanel';
-            _dbg.style.cssText = 'position:fixed;top:0;left:0;z-index:9999999;background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:11px;padding:6px 8px;line-height:1.6;pointer-events:none';
-            document.body.appendChild(_dbg);
-            function _updateDbg() {
-                const vv = window.visualViewport;
-                _dbg.innerHTML =
-                    'innerW: ' + window.innerWidth + '<br>' +
-                    'innerH: ' + window.innerHeight + '<br>' +
-                    'screen.w: ' + screen.width + '<br>' +
-                    'screen.h: ' + screen.height + '<br>' +
-                    'clientW: ' + document.documentElement.clientWidth + '<br>' +
-                    'clientH: ' + document.documentElement.clientHeight + '<br>' +
-                    'orient: ' + (screen.orientation ? screen.orientation.type : 'n/a') + '<br>' +
-                    'vvW: ' + (vv ? Math.round(vv.width) : 'n/a') + '<br>' +
-                    'vvH: ' + (vv ? Math.round(vv.height) : 'n/a');
-            }
-            _updateDbg();
-            setInterval(_updateDbg, 1000);
 
 
             // Forzar pantalla completa al tocar (necesario en Android)
@@ -372,10 +350,6 @@
             // Intentar directamente sin gesto si el navegador lo permite
             setTimeout(_requestFullscreen, 500);
 
-            // Intentar bloquear en landscape (funciona en fullscreen PWA)
-            if (screen.orientation && screen.orientation.lock) {
-                screen.orientation.lock('landscape-primary').catch(() => {});
-            }
 
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('./service-worker.js')
