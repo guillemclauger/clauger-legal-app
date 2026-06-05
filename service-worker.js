@@ -1,4 +1,4 @@
-const CACHE = 'clauger-v7';
+const CACHE = 'clauger-v8';
 const VERSION = '26_01';
 const FILES = [
   './index.html',
