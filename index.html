@@ -75,7 +75,7 @@
                     <div id="legalBadge" style="display:none" class="legal-badge">⚖️ MODO LEGAL</div>
                     <button class="header-btn" id="btnInformeFinal" style="display:none;background:#1a2744;color:#fff;font-weight:700;border-color:#1a2744">📄 Informe Final</button>
                     <button class="header-btn" id="btnActaInicial" style="display:none">📄 Acta Inicial</button>
-                    <span id="autosaveBadge" style="font-size:0.72rem;color:#6b7280;opacity:0.4;transition:opacity 0.5s;margin-right:0.25rem;white-space:nowrap"></span>
+                    <span id="autosaveBadge" style="display:none"></span>
                     <button class="header-btn" id="btnLoad">📂 Cargar</button>
                     <button class="header-btn" id="btnExport">💾 Exportar</button>
                     <button class="header-btn" id="btnLogout">🚪 Cerrar Sesión</button>
@@ -337,18 +337,18 @@
 
 
 
-            // Forzar pantalla completa al tocar (necesario en Android)
-            function _requestFullscreen() {
-                const el = document.documentElement;
-                if (el.requestFullscreen) el.requestFullscreen();
-                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+            // Fullscreen solo en Android (no en escritorio)
+            if (/Android/i.test(navigator.userAgent)) {
+                function _requestFullscreen() {
+                    const el = document.documentElement;
+                    if (el.requestFullscreen) el.requestFullscreen();
+                    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+                }
+                document.addEventListener('click', function _fsOnce() {
+                    _requestFullscreen();
+                    document.removeEventListener('click', _fsOnce);
+                }, { once: true });
             }
-            document.addEventListener('click', function _fsOnce() {
-                _requestFullscreen();
-                document.removeEventListener('click', _fsOnce);
-            }, { once: true });
-            // Intentar directamente sin gesto si el navegador lo permite
-            setTimeout(_requestFullscreen, 500);
 
 
             if ('serviceWorker' in navigator) {
