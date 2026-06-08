@@ -33,7 +33,8 @@ const EQUIPMENT_TYPES = {
             'Enfriador Aceite',
             'Enfriador Aceite Sec.',
             'Filtro Aceite',
-            'Filtro Aspiración'
+            'Filtro Aspiración',
+            'Otro'
         ]
     },
     'Recipiente': {
@@ -64,7 +65,7 @@ const EQUIPMENT_TYPES = {
             'Condensador Aire',
             'Condensador Adiabático'
         ]
-    }
+    },
 };
 
 // ============================================================================
@@ -125,7 +126,7 @@ const PAGES_CONFIG = {
                 fields: [
                     {name: "SISTEMA", type: "text"},
                     {name: "CIF", type: "text"},
-                    {name: "NÚMERO REVISIÓN", type: "text"}
+                    {name: "NÚMERO REVISIÓN", type: "select", options: ["", "R0", "R1", "R2"]}
                 ]
             },
             {
@@ -136,7 +137,6 @@ const PAGES_CONFIG = {
                 fields: [
                     {name: "CLIENTE", type: "text"},
                     {name: "DIRECCIÓN", type: "text"},
-                    {name: "CIF", type: "text"},
                     {name: "LOCALIDAD", type: "text"},
                     {name: "PROVINCIA", type: "text"},
                     {name: "CP", type: "text"}
@@ -160,7 +160,9 @@ const PAGES_CONFIG = {
                     {name: "CLAS. LOCAL", type: "select", options: ["", "Cat. A", "Cat. B", "Cat. C", "Cat. D"]},
                     {name: "NIVEL", type: "select", options: ["", "1", "2"]},
                     {name: "POT. ABS (kW)", type: "text"},
-                    {name: "SISTEMA REFRIG.", type: "select", options: ["", "Directo", "Indirecto cerrado", "Indirecto abierto", "Doble indirecto abierto", "Indirecto cerrado ventilado", "Indirecto abierto ventilado"]},
+                    {name: "SISTEMA REFRIG. 1", type: "select", options: ["", "Directo", "Indirecto cerrado", "Indirecto abierto", "Doble indirecto abierto", "Indirecto cerrado ventilado", "Indirecto abierto ventilado"]},
+                    {name: "SISTEMA REFRIG. 2", type: "select", options: ["", "Directo", "Indirecto cerrado", "Indirecto abierto", "Doble indirecto abierto", "Indirecto cerrado ventilado", "Indirecto abierto ventilado"]},
+                    {name: "SISTEMA REFRIG. 3", type: "select", options: ["", "Directo", "Indirecto cerrado", "Indirecto abierto", "Doble indirecto abierto", "Indirecto cerrado ventilado", "Indirecto abierto ventilado"]},
                     {name: "TIPO", type: "select", options: ["", "1 Etapa", "2 Etapa", "3 Etapa", "Cascada / Booster"]}
                 ]
             },
