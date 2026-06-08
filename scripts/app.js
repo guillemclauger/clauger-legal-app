@@ -19,7 +19,7 @@ const App = {
         });
         // En modo legal, estas pestañas ya están dentro de Revisión Final
         if (AppState.isLegalMode) {
-            document.querySelectorAll('.nav-tab[data-page="termografia"], .nav-tab[data-page="verif_fugas"], .nav-tab[data-page="equipos"]').forEach(tab => {
+            document.querySelectorAll('.nav-tab[data-page="termografia"], .nav-tab[data-page="verif_fugas"]').forEach(tab => {
                 tab.style.display = 'none';
             });
             document.getElementById('btnInformeFinal').style.display = 'block';
@@ -128,6 +128,13 @@ const App = {
 
     _applyAutosave(snap) {
         AppState.sectionsData       = snap.sectionsData || {};
+        // Auto-fill SISTEMA en modo legal desde lo que anotó el técnico
+        if (AppState.isLegalMode) {
+            const _inf  = AppState.sectionsData['datos_datos_informe']     || {};
+            const _inst = AppState.sectionsData['datos_datos_instalacion'] || {};
+            if (_inf['SISTEMA'] && !_inst['SISTEMA']) _inst['SISTEMA'] = _inf['SISTEMA'];
+            if (!AppState.sectionsData['datos_datos_instalacion']) AppState.sectionsData['datos_datos_instalacion'] = _inst;
+        }
         AppState.equipmentData      = snap.equipmentData || {};
         AppState.detectorsData      = snap.detectorsData || [];
         AppState.instalacionCircuitos = snap.instalacionCircuitos || AppState.instalacionCircuitos;
@@ -321,8 +328,9 @@ const App = {
                                 {name: 'Fecha', type: 'text', path: `${basePath}.items.${vIdx}.fechaExistente`},
                                 {name: 'Presión tarado (bar)', path: `${basePath}.items.${vIdx}.presionExistente`},
                                 {name: 'DN entrada', path: `${basePath}.items.${vIdx}.dnEntradaExistente`},
-                                {name: 'DN salida', path: `${basePath}.items.${vIdx}.dnSalidaExistente`}
-                            ], [valv.serieExistente, valv.fechaExistente, valv.presionExistente, valv.dnEntradaExistente||'', valv.dnSalidaExistente||''], dataAttr)}
+                                {name: 'DN salida', path: `${basePath}.items.${vIdx}.dnSalidaExistente`},
+                                {name: 'Acción', type: 'select', path: `${basePath}.items.${vIdx}.accionExistente`, options: ['', 'Revisión visual', 'Retimbrada', 'Substitución']}
+                            ], [valv.serieExistente, valv.fechaExistente, valv.presionExistente, valv.dnEntradaExistente||'', valv.dnSalidaExistente||'', valv.accionExistente||''], dataAttr)}
                         </div>
                         <div style="font-size:0.75rem;font-weight:700;color:#92400e;text-transform:uppercase;margin:0.5rem 0 0.25rem">PSV Nueva</div>
                         <div class="form-row">
@@ -331,8 +339,9 @@ const App = {
                                 {name: 'Fecha', type: 'text', path: `${basePath}.items.${vIdx}.fechaNueva`},
                                 {name: 'Presión tarado (bar)', path: `${basePath}.items.${vIdx}.presionNueva`},
                                 {name: 'DN entrada', path: `${basePath}.items.${vIdx}.dnEntradaNueva`},
-                                {name: 'DN salida', path: `${basePath}.items.${vIdx}.dnSalidaNueva`}
-                            ], [valv.serieNueva, valv.fechaNueva, valv.presionNueva, valv.dnEntradaNueva||'', valv.dnSalidaNueva||''], dataAttr)}
+                                {name: 'DN salida', path: `${basePath}.items.${vIdx}.dnSalidaNueva`},
+                                {name: 'Acción', type: 'select', path: `${basePath}.items.${vIdx}.accionNueva`, options: ['', 'Revisión visual', 'Retimbrada', 'Substitución']}
+                            ], [valv.serieNueva, valv.fechaNueva, valv.presionNueva, valv.dnEntradaNueva||'', valv.dnSalidaNueva||'', valv.accionNueva||''], dataAttr)}
                         </div>
                     </div>
                 `).join('')}
@@ -462,7 +471,7 @@ const App = {
         
         if (action === 'add') {
             if (!equipment[valvKey]) equipment[valvKey] = {items: []};
-            equipment[valvKey].items.push({marca: '', modelo: '', indicadorDescarga: '', serieExistente: '', fechaExistente: '', presionExistente: '', dnEntradaExistente: '', dnSalidaExistente: '', serieNueva: '', fechaNueva: '', presionNueva: '', dnEntradaNueva: '', dnSalidaNueva: ''});
+            equipment[valvKey].items.push({marca: '', modelo: '', indicadorDescarga: '', serieExistente: '', fechaExistente: '', presionExistente: '', dnEntradaExistente: '', dnSalidaExistente: '', accionExistente: '', serieNueva: '', fechaNueva: '', presionNueva: '', dnEntradaNueva: '', dnSalidaNueva: '', accionNueva: ''});
             this.showToast('✔️ Válvula añadida', 'success');
         } else if (action === 'remove' && confirm('¿Eliminar esta válvula?')) {
             equipment[valvKey].items.splice(valvIdx, 1);
@@ -580,7 +589,7 @@ const App = {
             const rfTabs = [
                 { id: 'portada',       icon: '🏠', label: 'Portada'                },
                 { id: 'indice',        icon: '📑', label: 'Índice'                 },
-                { id: 'acta_inicial',  icon: '📋', label: 'Acta Inicial'           },
+                { id: 'acta_inicial',  icon: '📋', label: 'Acta Final'             },
                 { id: 'equipos',       icon: '⚙️', label: 'Equipos'               },
                 { id: 'cert_psv',      icon: '📎', label: 'Cert PSV'              },
                 { id: 'verif_fugas',   icon: '🔍', label: 'Verif. Detector Fugas' },
@@ -705,7 +714,7 @@ const App = {
             AppState.serviciosData.forEach((servicio, index) => {
                 const servicioBtn = document.createElement('button');
                 servicioBtn.className = 'sidebar-subbtn' + (AppState.currentServicio === index ? ' active' : '');
-                servicioBtn.innerHTML = `<span style="font-size:0.75rem">▸</span><span>Servicio ${index + 1}</span>`;
+                servicioBtn.innerHTML = `<span style="font-size:0.75rem">▸</span><span>${servicio.idCamara || 'Servicio ' + (index + 1)}</span>`;
                 servicioBtn.onclick = () => {
                     AppState.currentServicio = index;
                     this.renderSidebar();
@@ -853,6 +862,7 @@ const App = {
             registradorTemp: '',
             detectorFugas: '',
             hacha: '',
+            existenciaDispositivo: '',
             dispositivoLlamada: '',
             funciona: ''
         };
@@ -934,8 +944,16 @@ const App = {
                             </select>
                         </div>
                         <div class="form-col">
+                            <label class="form-label">Existencia dispositivo de llamada</label>
+                            <select class="form-input" data-servicio="existenciaDispositivo">
+                                <option value="">Seleccionar...</option>
+                                <option value="SI" ${servicio.existenciaDispositivo === 'SI' ? 'selected' : ''}>SI</option>
+                                <option value="NO" ${servicio.existenciaDispositivo === 'NO' ? 'selected' : ''}>NO</option>
+                            </select>
+                        </div>
+                        <div class="form-col">
                             <label class="form-label">Dispositivo de llamada (E07-E08)</label>
-                            <select class="form-input" data-servicio="dispositivoLlamada">
+                            <select class="form-input" data-servicio="dispositivoLlamada" id="dispositivoLlamada_sel" ${servicio.existenciaDispositivo === 'NO' ? 'disabled style="background:#f3f4f6;cursor:not-allowed"' : ''}>
                                 <option value="">Seleccionar...</option>
                                 <option value="Simple" ${servicio.dispositivoLlamada === 'Simple' ? 'selected' : ''}>Simple</option>
                                 <option value="Doble" ${servicio.dispositivoLlamada === 'Doble' ? 'selected' : ''}>Doble</option>
@@ -959,6 +977,15 @@ const App = {
         workspace.querySelectorAll('[data-servicio]').forEach(input => {
             input.onchange = (e) => {
                 AppState.serviciosData[AppState.currentServicio][e.target.dataset.servicio] = e.target.value;
+                if (e.target.dataset.servicio === 'idCamara') this.renderSidebar();
+                if (e.target.dataset.servicio === 'existenciaDispositivo') {
+                    const disp = workspace.querySelector('#dispositivoLlamada_sel');
+                    if (disp) {
+                        disp.disabled = e.target.value === 'NO';
+                        disp.style.background = e.target.value === 'NO' ? '#f3f4f6' : '';
+                        disp.style.cursor = e.target.value === 'NO' ? 'not-allowed' : '';
+                    }
+                }
             };
         });
     },
@@ -1954,12 +1981,34 @@ La próxima inspección periódica obligatoria de la instalación frigorífica, 
                     <button class="add-vs-btn" onclick="App.regenerarPlanificacion()" style="margin:0">🔄 Regenerar texto automático</button>
                 </div>
 
-                <!-- Datos de referencia (solo lectura) -->
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;padding:1rem;background:#f0f9ff;border:1px solid #bae6fd;border-radius:0.5rem">
-                    <div><span style="font-size:0.78rem;color:#6b7280;font-weight:600;text-transform:uppercase">Nivel instalación</span><div style="font-weight:700;font-size:1.1rem;color:#1e40af">${nivel}</div></div>
-                    <div><span style="font-size:0.78rem;color:#6b7280;font-weight:600;text-transform:uppercase">Próxima revisión</span><div style="font-weight:700;font-size:1.1rem;color:#1e40af">${formatFecha(proxRev)}</div></div>
-                    <div><span style="font-size:0.78rem;color:#6b7280;font-weight:600;text-transform:uppercase">Próxima inspección</span><div style="font-weight:700;font-size:1.1rem;color:#1e40af">${formatFecha(proxInsp)}</div></div>
-                </div>
+                <!-- Tabla periodicidad revisión -->
+                ${(() => {
+                    const fechaPS = instalacion['FECHA PS'] || '';
+                    const totalKg = (AppState.instalacionCircuitos || []).reduce((s, c) => s + (parseFloat(c.carga) || 0), 0);
+                    let ageYears = null;
+                    if (fechaPS) { const d = new Date(fechaPS); if (!isNaN(d)) ageYears = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24 * 365.25); }
+                    const isAntigua = ageYears !== null && ageYears >= 15;
+                    const isHeavy   = totalKg >= 3000;
+                    const period    = (isAntigua && isHeavy) ? 'Cada 2 años' : 'Cada 5 años';
+                    const hl = (cond) => cond ? 'background:#fef9c3;font-weight:700' : '';
+                    return `<div style="overflow-x:auto;margin-bottom:1.5rem">
+                        <div style="font-weight:600;font-size:0.875rem;margin-bottom:0.5rem">Tabla — Periodicidad de revisión según antigüedad y carga</div>
+                        <div style="font-size:0.8rem;color:#6b7280;margin-bottom:0.5rem">Antigüedad: ${ageYears !== null ? Math.floor(ageYears) + ' años' : 'sin FECHA PS'} · Carga total: ${totalKg.toFixed(0)} kg · <strong>Resultado: ${period}</strong></div>
+                        <table style="border-collapse:collapse;min-width:500px">
+                            <thead><tr style="background:#1f2937;color:white">
+                                <th style="padding:0.6rem 1rem;border:1px solid #374151">Antigüedad</th>
+                                <th style="padding:0.6rem 1rem;border:1px solid #374151">Carga de refrigerante</th>
+                                <th style="padding:0.6rem 1rem;border:1px solid #374151">Periodicidad</th>
+                            </tr></thead>
+                            <tbody>
+                                <tr style="${hl(!isAntigua && !isHeavy)}"><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Inferior a 15 años</td><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Inferior a 3.000 kg</td><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Cada 5 años</td></tr>
+                                <tr style="background:#f9fafb;${hl(!isAntigua && isHeavy)}"><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Inferior a 15 años</td><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Superior a 3.000 kg</td><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Cada 5 años</td></tr>
+                                <tr style="${hl(isAntigua && !isHeavy)}"><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Superior a 15 años</td><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Inferior a 3.000 kg</td><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Cada 5 años</td></tr>
+                                <tr style="background:#f9fafb;${hl(isAntigua && isHeavy)}"><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Superior a 15 años</td><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Superior a 3.000 kg</td><td style="padding:0.5rem 1rem;border:1px solid #e5e7eb">Cada 2 años</td></tr>
+                            </tbody>
+                        </table>
+                    </div>`;
+                })()}
 
                 <!-- Sección 1: Revisión -->
                 <div class="form-section" style="margin-bottom:2rem">
@@ -1992,6 +2041,13 @@ La próxima inspección periódica obligatoria de la instalación frigorífica, 
                     </div>
 
                     <textarea id="plan-texto-inspeccion" class="form-input" rows="5" style="font-size:0.93rem;line-height:1.6;resize:vertical">${textoInsp}</textarea>
+                </div>
+
+                <!-- Datos de referencia (solo lectura) -->
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;padding:1rem;background:#f0f9ff;border:1px solid #bae6fd;border-radius:0.5rem">
+                    <div><span style="font-size:0.78rem;color:#6b7280;font-weight:600;text-transform:uppercase">Nivel instalación</span><div style="font-weight:700;font-size:1.1rem;color:#1e40af">${nivel}</div></div>
+                    <div><span style="font-size:0.78rem;color:#6b7280;font-weight:600;text-transform:uppercase">Próxima revisión</span><div style="font-weight:700;font-size:1.1rem;color:#1e40af">${formatFecha(proxRev)}</div></div>
+                    <div><span style="font-size:0.78rem;color:#6b7280;font-weight:600;text-transform:uppercase">Próxima inspección</span><div style="font-weight:700;font-size:1.1rem;color:#1e40af">${formatFecha(proxInsp)}</div></div>
                 </div>
             </div>
         `;
@@ -3345,12 +3401,16 @@ www.clauger.com`;
         const template = isIntercambiador ? 'plantilla2' : 'plantilla1';
         const context = {equipKey: unitKey, index: unitIndex, isSubEquip: true, subType, subIdx};
         
+        const isOtro = subType === 'Otro';
+        const subTitle = isOtro ? (subEquip.nombreEquipo || `Otro #${subIdx + 1}`) : `${subType} #${subIdx + 1}`;
+
         return `
             <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:0.75rem;padding:1.5rem;margin-bottom:1rem">
                 <div style="display:flex;justify-content:space-between;margin-bottom:1rem">
-                    <h4 style="font-weight:600">${subType} #${subIdx + 1}</h4>
+                    <h4 id="subequip-title-${unitKey}-${unitIndex}-${subIdx}" style="font-weight:600">${subTitle}</h4>
                     <button class="remove-vs-btn" onclick="App.removeSubEquipment('${unitKey}',${unitIndex},'${subType}',${subIdx})">Eliminar</button>
                 </div>
+                ${isOtro ? `<div class="form-row">${this.createFormFields([{name: 'Nombre equipo', path: `${subType}.${subIdx}.nombreEquipo`}], [subEquip.nombreEquipo||''], 'data-subfield')}</div>` : ''}
                 <div class="form-row">
                     ${this.createFormFields([
                         {name: 'Fabricante', path: `${subType}.${subIdx}.fabricante`},
@@ -3392,18 +3452,18 @@ www.clauger.com`;
                 </div>` : `
                 <div class="form-row">
                     ${this.createFormFields([
-                        {name: 'Nº Placa Industria', path: `${subType}.${subIdx}.numPlaca`},
+                        ...(isCompresor ? [] : [{name: 'Nº Placa Industria', path: `${subType}.${subIdx}.numPlaca`}]),
                         {name: 'Fecha Fabricación', path: `${subType}.${subIdx}.fechaFabricacion`},
                         ...(AppState.isLegalMode ? [{name: 'Normativa', type: 'select', path: `${subType}.${subIdx}.normativa`, options: ['', 'RD3099/1977', 'RD138/2011', 'RD552/2019']}] : [{name: 'Fluido', type: 'select', path: `${subType}.${subIdx}.fluido`, options: this._getFluidOptions()}])
-                    ], [subEquip.numPlaca, subEquip.fechaFabricacion, AppState.isLegalMode ? (subEquip.normativa||'') : subEquip.fluido], 'data-subfield')}
+                    ], [...(isCompresor ? [] : [subEquip.numPlaca]), subEquip.fechaFabricacion, AppState.isLegalMode ? (subEquip.normativa||'') : subEquip.fluido], 'data-subfield')}
                 </div>
                 ${AppState.isLegalMode ? `<div class="form-row">
                     ${this.createFormFields([
                         {name: 'Fluido', type: 'select', path: `${subType}.${subIdx}.fluido`, options: this._getFluidOptions()},
-                        {name: 'Vol. Interno (Lts)', path: `${subType}.${subIdx}.volInterno`},
+                        ...(isCompresor ? [] : [{name: 'Vol. Interno (Lts)', path: `${subType}.${subIdx}.volInterno`}]),
                         {name: 'Presión Max (bar)', path: `${subType}.${subIdx}.presionMax`},
                         {name: 'Presión Min (bar)', path: `${subType}.${subIdx}.presionMin`}
-                    ], [subEquip.fluido, subEquip.volInterno, subEquip.presionMax||'', subEquip.presionMin||''], 'data-subfield')}
+                    ], [subEquip.fluido, ...(isCompresor ? [] : [subEquip.volInterno]), subEquip.presionMax||'', subEquip.presionMin||''], 'data-subfield')}
                 </div>
                 <div class="form-row">
                     ${this.createFormFields([
@@ -3412,11 +3472,11 @@ www.clauger.com`;
                 </div>` : `
                 <div class="form-row">
                     ${this.createFormFields([
-                        {name: 'Vol. Interno (Lts)', path: `${subType}.${subIdx}.volInterno`},
+                        ...(isCompresor ? [] : [{name: 'Vol. Interno (Lts)', path: `${subType}.${subIdx}.volInterno`}]),
                         {name: 'Presión Max (bar)', path: `${subType}.${subIdx}.presionMax`},
                         {name: 'Presión Min (bar)', path: `${subType}.${subIdx}.presionMin`},
                         {name: 'Ubicación', path: `${subType}.${subIdx}.ubicacion`}
-                    ], [subEquip.volInterno, subEquip.presionMax||'', subEquip.presionMin||'', subEquip.ubicacion], 'data-subfield')}
+                    ], [...(isCompresor ? [] : [subEquip.volInterno]), subEquip.presionMax||'', subEquip.presionMin||'', subEquip.ubicacion], 'data-subfield')}
                 </div>`}`}
                 ${template === 'plantilla1' 
                     ? this.renderValvulas(subEquip.valvulas, context, 'single')
@@ -3473,7 +3533,8 @@ www.clauger.com`;
         }
         
         if (subType === 'Bloque Compresor') newSubEquip.presostato = '';
-        
+        if (subType === 'Otro') newSubEquip.nombreEquipo = '';
+
         unit.subEquipments[subType].push(newSubEquip);
         this.renderCompositeUnitsList();
         this.showToast(`✔️ ${subType} añadido`, 'success');
@@ -3642,6 +3703,12 @@ www.clauger.com`;
                 if (!content) return;
                 const [, equipKey, index] = content.id.split('_');
                 this.updateSubEquipmentField(equipKey, parseInt(index), e.target.dataset.subfield, e.target.value);
+                if (e.target.dataset.subfield?.endsWith('.nombreEquipo')) {
+                    const sfParts = e.target.dataset.subfield.split('.');
+                    const subIdx = sfParts[sfParts.length - 2];
+                    const titleEl = document.getElementById(`subequip-title-${equipKey}-${parseInt(index)}-${subIdx}`);
+                    if (titleEl) titleEl.textContent = e.target.value || `Otro #${parseInt(subIdx) + 1}`;
+                }
                 if (e.target.dataset.subfield?.endsWith('.fechaFabricacion') && AppState.isLegalMode) {
                     const normativa = this._normativaFromYear(e.target.value);
                     const normPath = e.target.dataset.subfield.replace('.fechaFabricacion', '.normativa');
@@ -3666,12 +3733,19 @@ www.clauger.com`;
     },
 
     updateSubEquipmentField(equipKey, unitIndex, subfieldPath, value) {
-        const parts = subfieldPath.split('.');
-        const subEquip = AppState.equipmentData[equipKey]?.[unitIndex]?.subEquipments?.[parts[0]]?.[parseInt(parts[1])];
+        const unit = AppState.equipmentData[equipKey]?.[unitIndex];
+        if (!unit || !unit.subEquipments) return;
+        let subType = null, restPath = '';
+        for (const st of Object.keys(unit.subEquipments)) {
+            if (subfieldPath.startsWith(st + '.')) { subType = st; restPath = subfieldPath.slice(st.length + 1); break; }
+        }
+        if (!subType) return;
+        const parts = restPath.split('.');
+        const subIdx = parseInt(parts[0]);
+        const subEquip = unit.subEquipments[subType]?.[subIdx];
         if (!subEquip) return;
-        
         let obj = subEquip;
-        for (let i = 2; i < parts.length - 1; i++) {
+        for (let i = 1; i < parts.length - 1; i++) {
             if (!obj[parts[i]]) obj[parts[i]] = isNaN(parts[i + 1]) ? {} : [];
             obj = obj[parts[i]];
         }
