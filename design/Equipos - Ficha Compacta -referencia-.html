@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ficha compacta de equipo — referencia para Claude Code</title>
+<!-- ============================================================
+     BOCETO DE REFERENCIA — Ficha compacta de equipo (Clauger)
+     Archivo autocontenido: tokens + estilos + maquetacion incrustados.
+     No requiere conexion ni archivos externos.
+     Clases clave a reutilizar:
+       .eq / .eq-bar / .eq-body   -> tarjeta de equipo
+       .ficha-top / .dsheet       -> foto + identificacion
+       .ab / .ab-comb             -> tabla A/B con celdas combinadas
+       .cert / .res-force         -> certificacion + "forzar favorable"
+       .ck / .seg                 -> checklist Nivel A (Si/No/NA)
+       .psv-gen                   -> bloque generico PSV (Marca/Modelo/Sifon)
+       .vtab--pair                -> tabla de valvulas existente|nueva con DN ent/sal
+     ============================================================ -->
+<style>
+/* ===== design tokens (Clauger) ===== */
+/* ==========================================================================
+   Clauger Design System — Tokens
+   Source: Clauger Brand Guidelines V4 (WIP), 2025/2026
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Lato:wght@300;400;700;900&display=swap');
+
+:root {
+  /* ---------- Core palette (web) ---------- */
+  --c-bleu-sombre:       #111629;  /* Replaces black in most cases */
+  --c-bleu-intermediate: #152849;
+  --c-bleu:              #1c366c;  /* Logo blue (post-2025 adjustment) */
+  --c-beige:             #ebe2d6;
+  --c-ecru:              #f8f5f1;  /* Replaces white in most cases */
+  --c-noir-pur:          #000000;  /* Reserved use */
+  --c-blanc-pur:         #ffffff;  /* Reserved use */
+
+  /* Logo accent — Pantone 654C reference */
+  --c-rouge-logo:        #d32525;
+
+  /* ---------- Market accents ---------- */
+  --c-mkt-panification:  #daaa55;
+  --c-mkt-patinoires:    #bfc3cf;
+  --c-mkt-laitiers:      #b6dccf;
+  --c-mkt-fruits:        #dbe38d;
+  --c-mkt-viandes:       #f19f8a;
+  --c-mkt-boisson:       #f7ae6a;
+  --c-mkt-fromagerie:    #fec748;
+  --c-mkt-environnement: #72bb6c;
+
+  /* ---------- Semantic ---------- */
+  --bg-page:        var(--c-ecru);
+  --bg-surface:     #ffffff;
+  --bg-raised:      var(--c-beige);
+  --bg-inverse:     var(--c-bleu-sombre);
+
+  --ink-primary:    var(--c-bleu-sombre);
+  --ink-secondary:  #4a5269;
+  --ink-tertiary:   #7e859a;
+  --ink-on-dark:    var(--c-ecru);
+  --ink-link:       var(--c-bleu);
+
+  --line-soft:      rgba(17, 22, 41, 0.08);
+  --line-medium:    rgba(17, 22, 41, 0.16);
+  --line-strong:    rgba(17, 22, 41, 0.32);
+  --line-on-dark:   rgba(248, 245, 241, 0.16);
+
+  --feedback-success: #1f8a4c;
+  --feedback-warning: #c98a1f;
+  --feedback-danger:  #b8351c;
+  --feedback-info:    var(--c-bleu);
+
+  /* ---------- Type ---------- */
+  --font-display: 'Inter', 'Aptos', 'Arial', system-ui, sans-serif;
+  --font-body:    'Lato', 'Aptos', 'Arial', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Menlo', monospace;
+
+  /* Body text base = 10pt as per brandbook; secondary +50% = 15pt; primary 22.5pt */
+  /* Translated to a screen scale anchored at 16px */
+  --fs-12: 0.75rem;   /* 12 — meta/caption */
+  --fs-14: 0.875rem;  /* 14 — small */
+  --fs-16: 1rem;      /* 16 — body default */
+  --fs-18: 1.125rem;  /* 18 — body large */
+  --fs-20: 1.25rem;   /* 20 — lead */
+  --fs-24: 1.5rem;    /* 24 — h4 / sub */
+  --fs-32: 2rem;      /* 32 — h3 */
+  --fs-44: 2.75rem;   /* 44 — h2 */
+  --fs-60: 3.75rem;   /* 60 — h1 */
+  --fs-88: 5.5rem;    /* 88 — display */
+
+  --lh-tight:   1.05;
+  --lh-snug:    1.2;
+  --lh-normal:  1.45;
+  --lh-relaxed: 1.6;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide:  0.04em;
+  --tracking-caps:  0.08em;
+
+  /* ---------- Spacing ---------- */
+  --space-0:  0;
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.5rem;
+  --space-6:  2rem;
+  --space-7:  3rem;
+  --space-8:  4rem;
+  --space-9:  6rem;
+  --space-10: 8rem;
+
+  /* ---------- Radii ---------- */
+  --radius-none: 0;
+  --radius-sm:   2px;
+  --radius-md:   4px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
+  --radius-pill: 999px;
+
+  /* ---------- Elevation ---------- */
+  --shadow-flat: none;
+  --shadow-sm:   0 1px 2px rgba(17, 22, 41, 0.06), 0 1px 1px rgba(17, 22, 41, 0.04);
+  --shadow-md:   0 4px 12px rgba(17, 22, 41, 0.08), 0 1px 2px rgba(17, 22, 41, 0.04);
+  --shadow-lg:   0 12px 32px rgba(17, 22, 41, 0.12), 0 2px 6px rgba(17, 22, 41, 0.06);
+  --shadow-focus: 0 0 0 3px rgba(28, 54, 108, 0.32);
+
+  /* ---------- Motion ---------- */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasis: cubic-bezier(0.3, 0, 0, 1.1);
+  --dur-quick: 120ms;
+  --dur-base:  200ms;
+  --dur-slow:  360ms;
+
+  /* ---------- Layout ---------- */
+  --container-narrow: 720px;
+  --container:        1120px;
+  --container-wide:   1440px;
+  --grid-gutter:      24px;
+  --gridline-width:   1px;
+}
+
+/* ---------- Base reset/utilities for system pages ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-page);
+  color: var(--ink-primary);
+  font-family: var(--font-body);
+  font-size: var(--fs-16);
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  color: var(--ink-primary);
+  margin: 0;
+  letter-spacing: var(--tracking-tight);
+  font-weight: 700;
+}
+
+h1 { font-size: var(--fs-60); line-height: var(--lh-tight); font-weight: 800; }
+h2 { font-size: var(--fs-44); line-height: var(--lh-tight); font-weight: 700; }
+h3 { font-size: var(--fs-32); line-height: var(--lh-snug); font-weight: 700; }
+h4 { font-size: var(--fs-24); line-height: var(--lh-snug); font-weight: 600; }
+h5 { font-size: var(--fs-20); line-height: var(--lh-snug); font-weight: 600; }
+h6 {
+  font-size: var(--fs-12);
+  line-height: var(--lh-snug);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+p { margin: 0; }
+
+a {
+  color: var(--ink-link);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+  transition: opacity var(--dur-quick) var(--ease-standard);
+}
+a:hover { opacity: 0.7; }
+
+/* Inverted scope */
+.on-dark {
+  background: var(--bg-inverse);
+  color: var(--ink-on-dark);
+}
+.on-dark h1, .on-dark h2, .on-dark h3, .on-dark h4, .on-dark h5 { color: var(--ink-on-dark); }
+.on-dark h6 { color: rgba(248, 245, 241, 0.7); }
+
+/* The brand arrow — used as a section/lead-in mark per brandbook (↘) */
+.arrow-mark {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  transform: translateY(0.05em);
+}
+
+/* Caps eyebrow */
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+.on-dark .eyebrow { color: rgba(248, 245, 241, 0.65); }
+
+/* Container */
+.container { max-width: var(--container); margin: 0 auto; padding: 0 var(--space-5); }
+.container-wide { max-width: var(--container-wide); margin: 0 auto; padding: 0 var(--space-5); }
+.container-narrow { max-width: var(--container-narrow); margin: 0 auto; padding: 0 var(--space-5); }
+
+</style>
+<style>
+/* ===== estilos de la ficha ===== */
+
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-body); color: var(--ink-primary); }
+
+  /* ===== shell of one ficha (reuses app card) ===== */
+  .eq { background: var(--bg-surface); border: 1px solid var(--line-soft); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+  .eq-bar { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-4); border-left: 3px solid var(--c-bleu); background: var(--c-ecru); border-bottom: 1px solid var(--line-soft); }
+  .eq-bar.wip { border-left-color: var(--feedback-warning); }
+  .eq-idx { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-14); color: var(--ink-tertiary); min-width: 22px; }
+  .eq-tw { flex: 1; min-width: 0; }
+  .eq-title { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-18); letter-spacing: var(--tracking-tight); }
+  .eq-code { display: inline-block; font-size: var(--fs-12); font-weight: 700; color: var(--c-bleu); background: #fff; border: 1px solid var(--line-medium); border-radius: var(--radius-sm); padding: 1px 7px; margin-right: 6px; vertical-align: middle; }
+  .eq-sum { display: flex; flex-wrap: wrap; gap: 0 var(--space-2); font-size: var(--fs-12); color: var(--ink-secondary); margin-top: 2px; }
+  .eq-sum .sep { color: var(--line-medium); }
+  .eq-sum b { color: var(--ink-primary); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-display); font-size: 10px; font-weight: 600; letter-spacing: var(--tracking-wide); text-transform: uppercase; padding: 3px 9px; border-radius: var(--radius-pill); }
+  .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .chip--ok { color: var(--feedback-success); background: rgba(31,138,76,.1); }
+  .chip--wip { color: var(--feedback-warning); background: rgba(201,138,31,.12); }
+  .eq-tools { display: flex; gap: 6px; }
+  .icon-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--ink-secondary); cursor: pointer; }
+  .icon-btn svg { width: 15px; height: 15px; }
+  .icon-btn--danger:hover { color: var(--feedback-danger); border-color: rgba(184,53,28,.3); }
+
+  .eq-body { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+
+  /* ===== group header ===== */
+  .grp-h { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .grp-h .eyebrow { font-family: var(--font-display); font-size: 11px; font-weight: 600; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--ink-secondary); white-space: nowrap; }
+  .grp-h svg { width: 15px; height: 15px; color: var(--ink-tertiary); flex: none; }
+  .grp-h .rule { flex: 1; height: 1px; background: var(--line-soft); }
+  .grp { padding-top: var(--space-4); border-top: 1px solid var(--line-soft); }
+
+  /* ===== TOP ZONE: photo + identification side by side ===== */
+  .ficha-top { display: grid; grid-template-columns: 240px 1fr; gap: var(--space-4); align-items: start; }
+  .ficha-photo .slot { border: 1.5px dashed var(--line-medium); border-radius: var(--radius-md); background: var(--bg-page); aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .slot-noimg { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ink-tertiary); text-align: center; }
+  .slot-noimg svg { width: 26px; height: 26px; }
+  .slot-noimg b { font-family: var(--font-display); font-size: var(--fs-12); font-weight: 600; color: var(--ink-secondary); }
+  .slot-noimg span { font-size: 10px; }
+
+  /* compact datasheet: label | value [ | label | value ] */
+  .dsheet { display: grid; grid-template-columns: max-content minmax(0,1fr) max-content minmax(0,1fr); border: 1px solid var(--line-soft); border-radius: var(--radius-md); overflow: hidden; }
+  .dl { font-size: var(--fs-12); font-weight: 600; color: var(--ink-secondary); background: #fcfbf9; padding: 0 var(--space-3); display: flex; align-items: center; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+  .dv { border-bottom: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft); display: flex; align-items: center; min-width: 0; }
+  .dv:last-child { border-right: 0; }
+  .dv--wide { grid-column: 2 / -1; }
+  .di { flex: 1; border: 0; background: transparent; font-family: var(--font-body); font-size: var(--fs-14); color: var(--ink-primary); padding: .42rem var(--space-3); width: 100%; min-width: 0; font-variant-numeric: tabular-nums; }
+  .di:focus { outline: none; background: rgba(28,54,108,.05); }
+  .dv.num { } .dv.num .di { text-align: right; padding-right: 4px; }
+  .du { font-size: 11px; color: var(--ink-tertiary); padding-right: var(--space-3); }
+  .di--sel { color: var(--ink-primary); }
+
+  /* A/B comparison (intercambiador) */
+  .ab { width: 100%; border-collapse: collapse; border: 1px solid var(--line-soft); border-radius: var(--radius-md); overflow: hidden; }
+  .ab thead th { font-family: var(--font-display); font-size: 10px; font-weight: 600; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--ink-secondary); padding: .4rem var(--space-3); background: var(--c-ecru); border-bottom: 1px solid var(--line-soft); text-align: left; }
+  .ab thead th.side { width: 34%; } .ab thead th.side b { color: var(--c-bleu); }
+  .ab tbody th { font-size: var(--fs-12); font-weight: 600; color: var(--ink-secondary); padding: 0 var(--space-3); width: 30%; background: #fcfbf9; border-right: 1px solid var(--line-soft); text-align: left; }
+  .ab tbody tr + tr td, .ab tbody tr + tr th { border-top: 1px solid var(--line-soft); }
+  .ab td { border-left: 1px solid var(--line-soft); }
+  .ab td .cell { display: flex; align-items: center; }
+  .ab td .ci { flex: 1; border: 0; background: transparent; font-size: var(--fs-14); padding: .42rem var(--space-3); width: 100%; font-variant-numeric: tabular-nums; color: var(--ink-primary); }
+  .ab td.num .ci { text-align: right; padding-right: 4px; }
+  .ab td .cu { font-size: 11px; color: var(--ink-tertiary); padding-right: var(--space-3); }
+
+  /* ===== certification band ===== */
+  .cert { background: var(--c-ecru); border: 1px solid var(--line-soft); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; align-items: center; gap: var(--space-4); }
+  .cert p { margin: 0; font-size: var(--fs-12); line-height: var(--lh-snug); color: var(--ink-secondary); flex: 1; }
+  .cert p b { color: var(--ink-primary); }
+  .cert-res { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+  .cert-k { font-size: 10px; font-weight: 600; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--ink-tertiary); }
+  .cert-badge { font-family: var(--font-display); font-size: var(--fs-14); font-weight: 700; padding: 5px 14px; border-radius: var(--radius-sm); background: rgba(201,138,31,.14); color: var(--feedback-warning); white-space: nowrap; }
+  .cert-badge.fav { background: rgba(31,138,76,.12); color: var(--feedback-success); }
+  .res-force { font-family: var(--font-display); font-size: 11px; font-weight: 600; color: var(--feedback-success); background: rgba(31,138,76,.08); border: 1px dashed rgba(31,138,76,.45); border-radius: var(--radius-sm); padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+  .res-force:hover { background: rgba(31,138,76,.16); }
+  .res-force.is-on { background: var(--feedback-success); color: #fff; border-style: solid; }
+  .res-note { font-size: 9.5px; color: var(--ink-tertiary); font-style: italic; max-width: 80px; line-height: 1.2; text-align: center; }
+
+  /* ===== visual checklist ===== */
+  .ck-list { display: flex; flex-direction: column; gap: 6px; }
+  .ck { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-3); background: var(--bg-surface); border: 1px solid var(--line-soft); border-left: 3px solid var(--line-soft); border-radius: var(--radius-sm); padding: 6px var(--space-3); }
+  .ck.is-ok { border-left-color: var(--feedback-success); }
+  .ck.is-bad { border-left-color: var(--feedback-danger); }
+  .ck.is-na { border-left-color: var(--line-medium); }
+  .ck-no { font-family: var(--font-display); font-weight: 700; color: var(--ink-tertiary); font-size: var(--fs-14); }
+  .ck-t { font-size: var(--fs-12); color: var(--ink-secondary); line-height: var(--lh-snug); }
+
+  /* segmented controls */
+  .seg { display: inline-flex; border: 1px solid var(--line-medium); border-radius: var(--radius-sm); overflow: hidden; flex: none; }
+  .seg button { font-family: var(--font-display); font-weight: 700; border: 0; background: var(--bg-surface); color: var(--ink-tertiary); cursor: pointer; border-left: 1px solid var(--line-soft); white-space: nowrap; }
+  .seg button:first-child { border-left: 0; }
+  .seg--sm button { font-size: 11px; padding: .3rem .6rem; }
+  .seg--mini button { font-size: 11px; padding: .25rem .5rem; min-width: 26px; }
+  .seg button.on-ok { background: var(--feedback-success); color: #fff; }
+  .seg button.on-bad { background: var(--feedback-danger); color: #fff; }
+  .seg button.on-na { background: var(--ink-tertiary); color: #fff; }
+
+  /* ===== valve table ===== */
+  .vside { font-family: var(--font-display); font-size: 11px; font-weight: 700; color: var(--c-bleu); margin: var(--space-2) 0 4px; letter-spacing: var(--tracking-wide); }
+  .vtab { width: 100%; border-collapse: collapse; }
+  .vtab th { font-family: var(--font-display); font-size: 10px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--ink-tertiary); text-align: left; padding: 0 6px var(--space-2); line-height: 1.2; }
+  .vtab th span { font-weight: 400; text-transform: none; }
+  .vtab th.num { text-align: right; }
+  .vtab td { padding: 3px 6px 3px 0; }
+  .vtab td:first-child { padding-left: 0; }
+  .vtab .ci { width: 100%; font-family: var(--font-body); font-size: var(--fs-12); color: var(--ink-primary); background: var(--bg-page); border: 1px solid var(--line-medium); border-radius: var(--radius-sm); padding: .35rem .5rem; font-variant-numeric: tabular-nums; }
+  .vtab td.num .ci { text-align: right; }
+  .vtab--safety td:nth-child(n+4) { text-align: center; }
+
+  /* combined (merged) rows in A/B table */
+  .ab .ab-comb th { width: 30%; }
+  .ab .ab-comb td { background: #fcfbf9; }
+  .ab tr.ab-divider td { padding: 0; height: 6px; background: var(--c-ecru); border-top: 1px solid var(--line-soft); }
+
+  /* generic PSV header block */
+  .psv-gen { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding: 6px var(--space-3); margin-bottom: var(--space-2); background: rgba(28,54,108,.04); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); }
+  .psv-tag { font-family: var(--font-display); font-size: 10px; font-weight: 700; letter-spacing: var(--tracking-wide); color: var(--c-bleu); background: #fff; border: 1px solid var(--line-medium); border-radius: var(--radius-sm); padding: 2px 7px; }
+  .pg-f { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--ink-secondary); }
+  .pg { width: 90px; font-family: var(--font-body); font-size: 11.5px; color: var(--ink-primary); background: var(--bg-page); border: 1px solid var(--line-medium); border-radius: var(--radius-sm); padding: .25rem .45rem; }
+  .pg-sif { gap: 8px; }
+
+  /* ===== paired valve table: existente | inspección | nueva ===== */
+  .vtab--pair { table-layout: fixed; }
+  .vtab--pair col { }
+  .vtab--pair .vgrp th { font-family: var(--font-display); font-size: 10px; font-weight: 700; letter-spacing: var(--tracking-wide); text-transform: uppercase; text-align: center; padding: 4px 6px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+  .vtab--pair .vgrp .g-old { background: rgba(28,54,108,.07); color: var(--c-bleu); }
+  .vtab--pair .vgrp .g-insp { background: #fcfbf9; color: var(--ink-tertiary); }
+  .vtab--pair .vgrp .g-arrow { background: transparent; }
+  .vtab--pair .vgrp .g-new { background: rgba(31,138,76,.09); color: var(--feedback-success); }
+  .vtab--pair .vgrp .g-sust { background: #fcfbf9; color: var(--ink-tertiary); }
+  .vtab--pair .vsub th { font-size: 9.5px; font-weight: 600; color: var(--ink-tertiary); text-transform: uppercase; letter-spacing: .02em; text-align: left; padding: 3px 6px 5px; line-height: 1.1; }
+  .vtab--pair .vsub th span { font-weight: 400; text-transform: none; }
+  .vtab--pair .vsub th.num { text-align: right; }
+  .vtab--pair td { padding: 3px 4px; vertical-align: middle; }
+  .vtab--pair .ci { width: 100%; font-family: var(--font-body); font-size: 11.5px; color: var(--ink-primary); background: var(--bg-page); border: 1px solid var(--line-medium); border-radius: var(--radius-sm); padding: .3rem .4rem; font-variant-numeric: tabular-nums; }
+  .vtab--pair td.num .ci { text-align: right; }
+  .vtab--pair .ci--empty { background: repeating-linear-gradient(135deg, transparent, transparent 4px, rgba(0,0,0,.03) 4px, rgba(0,0,0,.03) 5px); border-style: dashed; }
+  .vtab--pair .vc-new { background: rgba(31,138,76,.04); }
+  .vtab--pair .vc-new:first-of-type { border-left: 2px solid rgba(31,138,76,.2); }
+  .vtab--pair .vc-sust { text-align: center; border-left: 1px dashed var(--line-medium); border-right: 1px dashed var(--line-medium); }
+  .vtab--pair td.g-arrow, .vtab--pair .vc-arrow { text-align: center; padding: 0; }
+  .vtab--pair .vc-arrow { border-left: 1px dashed var(--line-medium); }
+  .vsubst { font-size: 16px; font-weight: 700; line-height: 1; }
+  .vsubst.yes { color: var(--feedback-success); }
+  .vsubst.no { color: var(--line-medium); }
+  .vtab--pair tr.is-sub .vc-new { background: rgba(31,138,76,.07); }
+  .vtab--pair .vc-insp { text-align: center; }
+  .vtab--pair .vc-insp .seg { display: inline-flex; }
+
+  /* comments */
+  .finput--area { width: 100%; font-family: var(--font-body); font-size: var(--fs-14); color: var(--ink-primary); background: var(--bg-page); border: 1px solid var(--line-medium); border-radius: var(--radius-md); padding: .55rem .7rem; min-height: 64px; resize: vertical; line-height: var(--lh-normal); }
+  .grp--last { }
+
+  /* canvas note */
+  .cv-note { font-family: var(--font-body); font-size: 13px; color: var(--ink-secondary); line-height: 1.5; }
+  .cv-note b { color: var(--ink-primary); }
+
+  body { background: var(--bg-page); padding: 24px; }
+  .ref-wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+  .ref-head { max-width: 1040px; margin: 0 auto 24px; }
+  .ref-head h1 { font-size: var(--fs-32); }
+  .ref-head p { color: var(--ink-secondary); margin-top: 6px; font-size: var(--fs-16); }
+</style>
+</head>
+<body>
+<div class="ref-head">
+  <h1>Ficha compacta de equipo</h1>
+  <p>Boceto de referencia. Mismas celdas de la app reordenadas en una sola hoja densa. Tres ejemplos: unidad compresora, recipiente e intercambiador (Lado A/B).</p>
+</div>
+<div class="ref-wrap" id="wrap"></div>
+<script>
+/* ============================================================================
+   Ficha compacta de equipo — reordena las celdas EXISTENTES de la app
+   en una sola hoja densa, al estilo del Excel actual.
+   No se inventan celdas nuevas: foto, identificación, condiciones de servicio,
+   certificación, revisión nivel A, válvulas y comentarios ya existían.
+   ============================================================================ */
+
+const ic = {
+  doc:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/></svg>`,
+  gauge:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 14l4-4M3.5 18a9 9 0 1 1 17 0"/></svg>`,
+  check:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+  valve:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>`,
+  note:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h16v12l-4 4H4z"/><path d="M16 20v-4h4"/></svg>`,
+  cam:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
+  trash:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>`,
+  chev:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 18l6-6-6-6"/></svg>`,
+};
+
+// label/value row helpers ----------------------------------------------------
+function val(v, unit){
+  if(unit) return `<div class="dv num"><input class="di" value="${v}"><span class="du">${unit}</span></div>`;
+  return `<div class="dv"><input class="di" value="${v}"></div>`;
+}
+function sel(v, unit){
+  return `<div class="dv"><div class="di di--sel">${v}</div></div>`;
+}
+// one full-width row: label + value spanning the 3 remaining columns
+function row1(label, v, unit){
+  const inner = unit ? `<input class="di" value="${v}"><span class="du">${unit}</span>` : `<input class="di" value="${v}">`;
+  return `<div class="dl">${label}</div><div class="dv dv--wide${unit?' num':''}">${inner}</div>`;
+}
+// two pairs in a row
+function row2(l1,v1,u1,l2,v2,u2){ return `<div class="dl">${l1}</div>${val(v1,u1)}<div class="dl">${l2}</div>${val(v2,u2)}`; }
+
+// the visual-inspection checklist (Revisión Nivel A) --------------------------
+function checklist(items){
+  return items.map(it=>{
+    const cls = it.s==='ok'?'is-ok':it.s==='na'?'is-na':it.s==='bad'?'is-bad':'';
+    const seg = ['ok','na','bad'].map(v=>{
+      const on = it.s===v?`on-${v==='ok'?'ok':v==='na'?'na':'bad'}`:'';
+      const lab = v==='ok'?'OK':v==='na'?'N/A':'No OK';
+      return `<button class="${on}">${lab}</button>`;
+    }).join('');
+    return `<div class="ck ${cls}"><span class="ck-no">—</span><div class="ck-t">${it.t}</div><div class="seg seg--sm">${seg}</div></div>`;
+  }).join('');
+}
+
+// Sí/No mini toggles ----------------------------------------------------------
+function yesNo(state){ // 'si' | 'no' | ''
+  return `<div class="seg seg--mini">${[['si','Sí'],['no','No']].map(([v,g])=>`<button class="${state===v?(v==='si'?'on-ok':'on-bad'):''}">${g}</button>`).join('')}</div>`;
+}
+function yesNoSub(state){ // sustitución: Sí verde, No gris
+  return `<div class="seg seg--mini">${[['si','Sí'],['no','No']].map(([v,g])=>`<button class="${state===v?(v==='si'?'on-ok':'on-na'):''}">${g}</button>`).join('')}</div>`;
+}
+
+// safety valve section — generic PSV header + paired EXISTENTE | NUEVA ----------
+function valvePairTable(side, psv, rows){
+  const gen = `<div class="psv-gen">
+    <span class="psv-tag">PSV</span>
+    <label class="pg-f">Marca<input class="pg" value="${psv.marca}"></label>
+    <label class="pg-f">Modelo<input class="pg" value="${psv.modelo}"></label>
+    <span class="pg-f pg-sif">Sifón ${yesNo(psv.sifon)}</span>
+  </div>`;
+  const head = `<thead>
+    <tr class="vgrp">
+      <th colspan="4" class="g-old">Válvula existente</th>
+      <th colspan="2" class="g-insp">Inspección</th>
+      <th class="g-sust">Sustit.</th>
+      <th colspan="4" class="g-new">Válvula nueva</th>
+    </tr>
+    <tr class="vsub">
+      <th>Nº serie</th><th class="num">Tarado <span>Barg</span></th><th>DN ent.</th><th>DN sal.</th>
+      <th>Insp. visual</th><th>Verif. disparo</th>
+      <th>Sí/No</th>
+      <th>Nº serie</th><th class="num">Tarado <span>Barg</span></th><th>DN ent.</th><th>DN sal.</th>
+    </tr></thead>`;
+  const body = rows.map(r=>{
+    const sub = r[6];
+    const nc = (v)=> sub ? `<input class="ci" value="${v}">` : `<input class="ci ci--empty" value="" placeholder="—" disabled>`;
+    return `<tr class="${sub?'is-sub':''}">
+      <td><input class="ci" value="${r[0]}"></td>
+      <td class="num"><input class="ci" value="${r[1]}"></td>
+      <td><input class="ci" value="${r[2]}"></td>
+      <td><input class="ci" value="${r[3]}"></td>
+      <td class="vc-insp">${yesNo(r[4])}</td>
+      <td class="vc-insp">${yesNo(r[5])}</td>
+      <td class="vc-sust">${yesNoSub(sub?'si':'no')}</td>
+      <td class="vc-new">${nc(r[7])}</td>
+      <td class="vc-new num">${nc(r[8])}</td>
+      <td class="vc-new">${nc(r[9])}</td>
+      <td class="vc-new">${nc(r[10])}</td>
+    </tr>`;
+  }).join('');
+  return `${side?`<div class="vside">${side}</div>`:''}${gen}<table class="vtab vtab--pair">
+    <colgroup><col style="width:11%"><col style="width:7%"><col style="width:6%"><col style="width:6%"><col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:11%"><col style="width:7%"><col style="width:6%"><col style="width:6%"></colgroup>
+    ${head}<tbody>${body}</tbody></table>`;
+}
+
+// the whole ficha -------------------------------------------------------------
+function buildFicha(cfg){
+  const idBlock = cfg.lados
+    ? `<table class="ab ab--compact">
+        <thead><tr><th>Parámetro</th><th class="side">Lado&nbsp;<b>A</b></th><th class="side">Lado&nbsp;<b>B</b></th></tr></thead>
+        <tbody>
+          ${(cfg.combined||[]).map(r=>`<tr class="ab-comb"><th>${r[0]}</th><td colspan="2"><div class="cell"><input class="ci" value="${r[1]}">${r[2]?`<span class="cu">${r[2]}</span>`:''}</div></td></tr>`).join('')}
+          ${cfg.combined?`<tr class="ab-divider"><td colspan="3"></td></tr>`:''}
+          ${cfg.lados.map(r=>`<tr><th>${r[0]}</th>
+          <td class="${r[3]?'num':''}"><div class="cell"><input class="ci" value="${r[1]}">${r[3]?`<span class="cu">${r[3]}</span>`:''}</div></td>
+          <td class="${r[3]?'num':''}"><div class="cell"><input class="ci" value="${r[2]}">${r[3]?`<span class="cu">${r[3]}</span>`:''}</div></td></tr>`).join('')}
+          ${cfg.localCombined?`<tr class="ab-comb"><th>Local</th><td colspan="2"><div class="cell"><input class="ci" value="${cfg.localCombined}"></div></td></tr>`:''}
+        </tbody></table>`
+    : `<div class="dsheet">${cfg.idRows.join('')}</div>`;
+
+  const resForced = cfg.status==='ok';
+  const resCtrl = `<div class="cert-res">
+      <span class="cert-k">Resultado</span>
+      <span class="cert-badge ${resForced?'fav':''}">${resForced?'Favorable':'Pendiente'}</span>
+      ${!resForced?`<button class="res-force" onclick="forceFav(this)">⚑ Forzar favorable</button>
+      <span class="res-note">No se exporta al PDF</span>`:''}
+    </div>`;
+
+  return `
+  <div class="eq open">
+    <!-- HEADER BAR (celda existente) -->
+    <div class="eq-bar">
+      <span class="eq-idx">${cfg.idx}</span>
+      <div class="eq-tw">
+        <div class="eq-title"><span class="eq-code">${cfg.code}</span> ${cfg.title}</div>
+        <div class="eq-sum"><span><b>${cfg.maker}</b></span><span class="sep">·</span><span>${cfg.model}</span><span class="sep">·</span><span>${cfg.local}</span></div>
+      </div>
+      <span class="chip chip--${cfg.status}">${cfg.status==='ok'?'Completo':'Pendiente'}</span>
+      <div class="eq-tools"><button class="icon-btn icon-btn--danger">${ic.trash}</button><button class="icon-btn">${ic.chev}</button></div>
+    </div>
+
+    <div class="eq-body">
+      <!-- ZONA SUPERIOR: foto + identificación (reordenado, lado a lado como Excel) -->
+      <div class="ficha-top">
+        <div class="ficha-photo">
+          <div class="slot"><span class="slot-noimg">${ic.cam}<b>Imagen no disponible</b><span>Toca para añadir</span></span></div>
+        </div>
+        <div class="ficha-id">
+          <div class="grp-h">${ic.doc}<span class="eyebrow">Identificación y condiciones de servicio</span><span class="rule"></span></div>
+          ${idBlock}
+        </div>
+      </div>
+
+      <!-- BANDA DE CERTIFICACIÓN (texto existente) -->
+      <div class="cert">
+        <p><b>Clauger Refrigeración Ibérica S.A.</b>, como empresa frigorista habilitada, certifica que se ha efectuado la revisión del aparato a presión cuyas características se mencionan en el presente certificado de acuerdo con el RD&nbsp;552/2019, con resultado:</p>
+        ${resCtrl}
+      </div>
+
+      <!-- REVISIÓN NIVEL A (celdas de checklist existentes, traídas aquí) -->
+      <div class="grp">
+        <div class="grp-h">${ic.check}<span class="eyebrow">Revisión Nivel A · Visual</span><span class="rule"></span></div>
+        <div class="ck-list">${checklist(cfg.checklist)}</div>
+      </div>
+
+      <!-- ELEMENTOS DE SEGURIDAD (tabla de válvulas existente, ampliada) -->
+      <div class="grp">
+        <div class="grp-h">${ic.valve}<span class="eyebrow">Elementos de seguridad · Válvulas</span><span class="rule"></span></div>
+        ${cfg.valvesB ? valvePairTable('Lado A', cfg.psvA, cfg.valves)+valvePairTable('Lado B', cfg.psvB, cfg.valvesB) : valvePairTable(null, cfg.psv, cfg.valves)}
+      </div>
+
+      <!-- COMENTARIOS (celda existente) -->
+      <div class="grp grp--last">
+        <div class="grp-h">${ic.note}<span class="eyebrow">Comentarios / Observaciones</span><span class="rule"></span></div>
+        <textarea class="finput finput--area">${cfg.comment}</textarea>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ===== three example equipments ============================================
+const FICHA_UC = buildFicha({
+  idx:'01', code:'UC-01', title:'Unidad Compresora', maker:'Mycom', model:'N6WB', local:'Sala de máquinas 1', status:'ok',
+  idRows:[
+    row1('Fabricante','Mycom'),
+    row1('Modelo','N6WB'),
+    row2('Nº serie','C-99214',null,'Categoría','III'),
+    row2('Fabricación','2009',null,'Normativa','RD 552/2019'),
+    row2('P.S. Máx','19,0','bar','P.S. Mín','-0,9','bar'),
+    row1('Local','Sala de máquinas 1'),
+  ],
+  checklist:[
+    {t:'Inspección visual del aparato observando que no presenta defectos, ni corrosiones en su superficie y soldaduras.', s:'ok'},
+    {t:'Inspección visual interna del aparato.', s:'ok'},
+    {t:'Inspección visual del aislamiento / Termografía', s:'na'},
+    {t:'Control de espesores por ultrasonidos según mediciones. (Ver Anexo mediciones)', s:'ok'},
+  ],
+  psv:{marca:'Herlicq',modelo:'902',sifon:'si'},
+  valves:[
+    ['VS-77120','19','25','40','si','si', false, '','','',''],
+    ['VS-77121','19','25','40','si','no', true, 'VS-90233','19','25','40'],
+  ],
+  comment:'Placa de características legible. Aislamiento en buen estado. Válvula VS-77121 con fuga en estanqueidad — sustituida por VS-90233 (marzo 2025).',
+});
+
+const FICHA_RE = buildFicha({
+  idx:'02', code:'RE-01', title:'Recipiente de líquido', maker:'Frigerator', model:'RL-2000', local:'Sala de máquinas 2', status:'ok',
+  idRows:[
+    row1('Fabricante','Frigerator'),
+    row1('Modelo','RL-2000'),
+    row2('Nº serie','RL-04471',null,'Categoría','IV'),
+    row2('Fabricación','2015',null,'Normativa','RD 552/2019'),
+    row2('Volumen','2.000','dm³','Fluido','R-717'),
+    row2('P.S. Máx','19,0','bar','Local','Sala máq. 2'),
+  ],
+  checklist:[
+    {t:'Inspección visual del aparato observando que no presenta defectos, ni corrosiones en su superficie y soldaduras.', s:'ok'},
+    {t:'Inspección visual interna del aparato.', s:'ok'},
+    {t:'Inspección visual del aislamiento / Termografía', s:'ok'},
+    {t:'Verificación estado y existencia placa de características', s:'ok'},
+    {t:'Control de espesores por ultrasonidos según mediciones. (Ver Anexo mediciones)', s:'ok'},
+  ],
+  psv:{marca:'Castel',modelo:'3060',sifon:'no'},
+  valves:[
+    ['VS-88010','19','25','40','si','si', false, '','','',''],
+    ['VS-88011','19','25','40','si','si', false, '','','',''],
+  ],
+  comment:'Recipiente en correcto estado. Espesores dentro de tolerancia.',
+});
+
+const FICHA_IN = buildFicha({
+  idx:'03', code:'IN-01', title:'Intercambiador de placas', maker:'Alfa Laval', model:'M15-BFG', local:'Sala de máquinas 2', status:'wip',
+  combined:[
+    ['Marca','Alfa Laval'],
+    ['Modelo','M15-BFG'],
+    ['Fecha fabricación','2018'],
+    ['Categoría','III'],
+  ],
+  lados:[
+    ['Volumen','48','52','dm³'],
+    ['Fluido','R-717 · Amoníaco','Agua glicolada 30%',null],
+    ['P.S. Máx','28,0','10,0','bar'],
+    ['P.S. Mín','-1,0','0,0','bar'],
+  ],
+  localCombined:'Sala de máquinas 2',
+  idRows:[],
+  checklist:[
+    {t:'Inspección visual del aparato observando que no presenta defectos, ni corrosiones en su superficie y soldaduras.', s:'ok'},
+    {t:'Inspección visual interna del aparato.', s:'ok'},
+    {t:'Verificación estado y existencia placa de características', s:''},
+  ],
+  psvA:{marca:'Herlicq',modelo:'902',sifon:'no'},
+  valves:[
+    ['VS-30584','28','20','32','si','si', false, '','','',''],
+  ],
+  psvB:{marca:'Herlicq',modelo:'451',sifon:'si'},
+  valvesB:[
+    ['VS-30585','10','25','40','si','no', true, 'VS-41120','10','25','40'],
+  ],
+  comment:'Pendiente verificar placa de características del lado B.',
+});
+
+window.FICHAS = { UC: FICHA_UC, RE: FICHA_RE, IN: FICHA_IN };
+
+</script>
+<script>
+  window.forceFav = function(btn){
+    var badge = btn.parentElement.querySelector('.cert-badge');
+    var on = btn.classList.toggle('is-on');
+    btn.textContent = on ? '\u2691 Favorable (forzado)' : '\u2691 Forzar favorable';
+    if(badge){ badge.textContent = on ? 'Favorable' : 'Pendiente'; badge.classList.toggle('fav', on); }
+  };
+  document.getElementById('wrap').innerHTML = window.FICHAS.UC + window.FICHAS.RE + window.FICHAS.IN;
+</script>
+</body>
+</html>

@@ -1,0 +1,470 @@
+/**
+ * ============================================================================
+ * CLAUGER - Sistema de Informes Técnicos
+ * ============================================================================
+ * Archivo: main.css
+ * Descripción: Estilos base, layout principal, header, sidebar, workspace
+ * Versión: 2.0 — Sistema visual navy #1a2744
+ * ============================================================================
+ */
+
+/* ============================================================================
+   TOKENS DE DISEÑO
+   ============================================================================ */
+:root {
+  --navy:        #1a2744;
+  --navy-800:    #22314f;
+  --navy-700:    #2c3a5c;
+  --accent:      #2f5aa6;
+  --accent-700:  #244a8c;
+  --accent-soft: #eaf0fa;
+  --ecru:        #f7f5f1;
+  --surface:     #ffffff;
+  --surface-2:   #fbfaf8;
+  --ink:         #1a2744;
+  --ink-2:       #4d5670;
+  --ink-3:       #8189a0;
+  --on-dark:     #f4f6fb;
+  --on-dark-2:   rgba(244,246,251,.62);
+  --line:        rgba(26,39,68,.10);
+  --line-2:      rgba(26,39,68,.18);
+  --line-3:      rgba(26,39,68,.30);
+  --line-dark:   rgba(244,246,251,.14);
+  --calc-bg:     #eef1f7;
+  --calc-line:   #c8d2e6;
+  --calc-ink:    #3b4663;
+  --ok:  #1f8a4c; --ok-bg:   #e9f5ee;
+  --bad: #c0392b; --bad-bg:  #fbecea;
+  --warn:#c2871a; --warn-bg: #fbf2e0;
+  --na:  #6b7280;
+  --display: 'Inter', system-ui, Arial, sans-serif;
+  --body:    'Lato', system-ui, Arial, sans-serif;
+  --r-sm:4px; --r-md:7px; --r-lg:10px; --r-pill:999px;
+  --sh-sm: 0 1px 2px rgba(26,39,68,.06), 0 1px 1px rgba(26,39,68,.04);
+  --sh-md: 0 4px 14px rgba(26,39,68,.08), 0 1px 3px rgba(26,39,68,.05);
+  --focus: 0 0 0 3px rgba(47,90,166,.28);
+}
+
+/* ============================================================================
+   RESET Y ESTILOS BASE
+   ============================================================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--body);
+    background: var(--ecru);
+    color: var(--ink);
+    overscroll-behavior: none;
+    width: 100vw;
+    min-height: 100dvh;
+    max-width: 100%;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+html {
+    overscroll-behavior: none;
+    width: 100%;
+    height: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--display);
+    letter-spacing: -.01em;
+}
+
+/* ============================================================================
+   CONTENEDOR PRINCIPAL DE LA APLICACIÓN
+   ============================================================================ */
+.app-container {
+    display: none;
+    min-height: 100dvh;
+    width: 100%;
+}
+
+.app-container.show {
+    display: block;
+}
+
+/* ============================================================================
+   HEADER (CABECERA PRINCIPAL)
+   ============================================================================ */
+.header {
+    background: var(--navy);
+    color: var(--on-dark);
+    padding: 0 1.5rem;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--line-dark);
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 1rem;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.header-icon {
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+.header-title {
+    font-family: var(--display);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--on-dark);
+    letter-spacing: .02em;
+}
+
+.header-mode {
+    font-size: 0.7rem;
+    color: var(--on-dark-2);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.header-btn {
+    padding: 0.42rem 0.72rem;
+    background: transparent;
+    border: 1px solid var(--line-dark);
+    border-radius: var(--r-md);
+    color: var(--on-dark);
+    font-size: 0.8rem;
+    font-family: var(--display);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .12s;
+}
+
+.header-btn:hover {
+    background: rgba(244,246,251,.08);
+}
+
+.header-btn:active {
+    background: rgba(244,246,251,.12);
+}
+
+/* Botón Informe Final — sólido blanco sobre navy */
+#btnInformeFinal {
+    background: var(--on-dark) !important;
+    color: var(--navy) !important;
+    border-color: var(--on-dark) !important;
+    font-weight: 600 !important;
+}
+#btnInformeFinal:hover {
+    background: #fff !important;
+}
+
+.legal-badge {
+    background: rgba(243,210,122,.12);
+    border: 1px solid rgba(243,210,122,.30);
+    color: #f3d27a;
+    padding: 4px 10px;
+    border-radius: var(--r-pill);
+    font-size: 11px;
+    font-family: var(--display);
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+/* ============================================================================
+   NAVEGACIÓN POR PESTAÑAS
+   ============================================================================ */
+.tabs-navigation {
+    background: var(--navy);
+    padding: 0 1.5rem;
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--line-dark);
+}
+
+.nav-tab {
+    padding: 0.8rem 0.85rem;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    border-radius: 0;
+    color: var(--on-dark-2);
+    font-size: 0.8rem;
+    font-family: var(--display);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color .12s;
+}
+
+.nav-tab:hover {
+    color: var(--on-dark);
+}
+
+.nav-tab.active {
+    color: var(--on-dark);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+}
+
+/* ============================================================================
+   CONTENEDOR PRINCIPAL (SIDEBAR + WORKSPACE)
+   ============================================================================ */
+.main-container {
+    display: flex;
+    height: calc(100dvh - 115px);
+}
+
+/* ============================================================================
+   SIDEBAR (MENÚ LATERAL)
+   ============================================================================ */
+.sidebar {
+    width: 250px;
+    background: var(--surface);
+    color: var(--ink);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+}
+
+.sidebar-title {
+    padding: 0.875rem 1rem;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 0.7rem;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--line);
+}
+
+.sidebar-btn {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    color: var(--ink-2);
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-family: var(--body);
+    transition: background .12s, color .12s;
+    border-left: 2px solid transparent;
+}
+
+.sidebar-btn:hover {
+    background: var(--ecru);
+    color: var(--ink);
+}
+
+.sidebar-btn.active {
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    color: var(--ink);
+    font-weight: 700;
+}
+
+.sidebar-btn .icon {
+    font-size: 1rem;
+    flex: none;
+}
+
+.sidebar-subbtn {
+    width: 100%;
+    padding: 0.55rem 1rem 0.55rem 2rem;
+    background: transparent;
+    border: none;
+    color: var(--ink-3);
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    font-family: var(--body);
+    border-left: 2px solid transparent;
+    transition: background .12s, color .12s;
+}
+
+.sidebar-subbtn:hover {
+    background: var(--ecru);
+    color: var(--ink-2);
+}
+
+.sidebar-subbtn.active {
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    color: var(--ink);
+    font-weight: 700;
+}
+
+/* ============================================================================
+   WORKSPACE (ÁREA DE TRABAJO)
+   ============================================================================ */
+.workspace {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    background: var(--ecru);
+}
+
+.empty-workspace {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    text-align: center;
+    color: var(--ink-3);
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+/* ============================================================================
+   SECCIONES Y TARJETAS
+   ============================================================================ */
+.section-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 2rem;
+    box-shadow: var(--sh-sm);
+    margin-bottom: 1.5rem;
+}
+
+.section-title {
+    font-family: var(--display);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    letter-spacing: -.01em;
+}
+
+/* ============================================================================
+   MODAL DE IMÁGENES
+   ============================================================================ */
+.image-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-modal.show {
+    display: flex;
+}
+
+.image-modal-content {
+    max-width: 90%;
+    max-height: 90%;
+}
+
+.image-modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.5rem;
+}
+
+/* ============================================================================
+   NOTIFICACIONES TOAST
+   ============================================================================ */
+.toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    padding: 0.875rem 1.25rem;
+    border-radius: var(--r-md);
+    color: white;
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 0.875rem;
+    box-shadow: var(--sh-md);
+    z-index: 1000;
+    animation: slideIn 0.3s ease;
+}
+
+.toast-success {
+    background: var(--ok);
+}
+
+.toast-error {
+    background: var(--bad);
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+/* ============================================================================
+   AUTOSAVE BADGE
+   ============================================================================ */
+#autosaveBadge {
+    font-family: var(--display);
+    font-size: 11px;
+    color: var(--on-dark-2);
+    letter-spacing: .03em;
+}
+
+/* ============================================================================
+   RESPONSIVE - TABLET
+   ============================================================================ */
+@media (max-width: 700px) {
+    .main-container {
+        flex-direction: column;
+        height: auto;
+        min-height: calc(100dvh - 115px);
+    }
+
+    .sidebar {
+        width: 100%;
+        max-height: 35vh;
+        overflow-y: auto;
+    }
+}
