@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Verificación Detector Fugas - Técnicos</title>
+</head>
+<body>
+    <div class="section-card">
+        <div class="section-title">Verificación Detector de Fugas</div>
+
+        <div class="verification-header">
+            <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem;">DETECTOR / CENTRALITA</h3>
+            <p style="font-size: 0.875rem; opacity: 0.9;">Normativa: RD 552/2019 IF-16 Pto 3.3</p>
+        </div>
+
+        <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1.5rem;">
+            <p style="color: #1e40af; font-weight: 600; margin-bottom: 0.5rem;">Instrucciones</p>
+            <p style="color: #1e3a8a; font-size: 0.875rem;">
+                Registre la información de cada detector de fugas instalado en la instalación. 
+                Verifique el correcto funcionamiento de cada detector y documente con fotografías.
+            </p>
+        </div>
+
+        <button class="add-equipment-btn" onclick="agregarDetector()">
+            Añadir Detector
+        </button>
+
+        <div id="detectoresContainer">
+            <!-- Los detectores se cargarán dinámicamente -->
+            <div style="background: linear-gradient(135deg, #f9fafb, #ffffff); border: 2px solid #e5e7eb; border-radius: 1rem; padding: 3rem; text-align: center;">
+                <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.5;">—</div>
+                <h3 style="color: #1f2937; font-size: 1.5rem; margin-bottom: 1rem;">No hay detectores registrados</h3>
+                <p style="color: #6b7280; margin-bottom: 2rem;">
+                    Haga clic en el botón "Añadir Detector" para comenzar a registrar detectores de fugas.
+                </p>
+            </div>
+        </div>
+
+        <div class="form-section" style="margin-top: 2rem;">
+            <div class="form-section-title">Ejemplo de Detector</div>
+            <p style="color: #6b7280; margin-bottom: 1rem; font-size: 0.875rem;">
+                Cada detector contendrá los siguientes datos y verificaciones:
+            </p>
+            
+            <div style="background: white; border: 2px solid #e5e7eb; border-radius: 0.75rem; padding: 1.5rem;">
+                <div style="font-weight: 600; color: #1f2937; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #e5e7eb;">
+                    Datos del Detector
+                </div>
+                <div class="form-row">
+                    <div class="form-col">
+                        <label class="form-label">Marca</label>
+                        <input type="text" class="form-input" placeholder="Ej: Bacharach" disabled>
+                    </div>
+                    <div class="form-col">
+                        <label class="form-label">Modelo</label>
+                        <input type="text" class="form-input" placeholder="Ej: MGS-400" disabled>
+                    </div>
+                    <div class="form-col">
+                        <label class="form-label">Nº de Serie</label>
+                        <input type="text" class="form-input" placeholder="Ej: 12345678" disabled>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-col">
+                        <label class="form-label">Refrigerante</label>
+                        <input type="text" class="form-input" placeholder="Ej: R717" disabled>
+                    </div>
+                    <div class="form-col">
+                        <label class="form-label">Pre-Alarma (ppm)</label>
+                        <input type="text" class="form-input" placeholder="Ej: 500" disabled>
+                    </div>
+                    <div class="form-col">
+                        <label class="form-label">Alarma (ppm)</label>
+                        <input type="text" class="form-input" placeholder="Ej: 1000" disabled>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #e5e7eb;">
+                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 1rem;">OPERACIONES REALIZADAS</div>
+                    <div class="operations-table">
+                        <div class="operation-row">
+                            <div class="operation-label">Correcta ubicación</div>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_ubicacion" disabled> SI
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_ubicacion" disabled> NO
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_ubicacion" disabled> N/A
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="operation-row">
+                            <div class="operation-label">Tiempo de respuesta inferior o igual a 60 segundos</div>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_tiempo" disabled> SI
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_tiempo" disabled> NO
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_tiempo" disabled> N/A
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="operation-row">
+                            <div class="operation-label">Verificación del estado general</div>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_estado" disabled> SI
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_estado" disabled> NO
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_estado" disabled> N/A
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="operation-row">
+                            <div class="operation-label">Test leds y display</div>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_leds" disabled> SI
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_leds" disabled> NO
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="ejemplo_leds" disabled> N/A
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #e5e7eb;">
+                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 1rem;">Imágenes</div>
+                    <div class="photo-upload" style="max-width: 300px;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem; color: #6b7280;">+</div>
+                        <div style="font-size: 0.875rem; color: #6b7280; font-weight: 600;">Añadir Imagen</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #e5e7eb;">
+                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 1rem;">Observaciones / Comentarios</div>
+                    <textarea class="form-input" rows="4" placeholder="Escriba aquí las observaciones..." disabled></textarea>
+                </div>
+
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #e5e7eb;">
+                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 1rem;">Fechas y Responsables</div>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label class="form-label">Fecha Verificación</label>
+                            <input type="text" class="form-input" placeholder="dd/mm/aaaa" disabled>
+                        </div>
+                        <div class="form-col">
+                            <label class="form-label">Fecha Máxima Próxima Verificación</label>
+                            <input type="text" class="form-input" placeholder="dd/mm/aaaa" disabled>
+                        </div>
+                        <div class="form-col">
+                            <label class="form-label">Técnico verificación</label>
+                            <input type="text" class="form-input" placeholder="Nombre del técnico" disabled>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.75rem; padding: 1rem; margin-top: 2rem;">
+            <p style="color: #92400e; font-weight: 600; margin-bottom: 0.5rem;">Información</p>
+            <p style="color: #92400e; font-size: 0.875rem;">
+                Los detectores se gestionarán dinámicamente a través del sistema JavaScript. 
+                Cada detector puede ser editado o eliminado individualmente desde el menú lateral.
+                Las operaciones realizadas incluyen 11 verificaciones completas según normativa.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        function agregarDetector() {
+            alert('Esta funcionalidad se activará cuando se integre con el sistema JavaScript completo.');
+        }
+    </script>
+</body>
+</html>
