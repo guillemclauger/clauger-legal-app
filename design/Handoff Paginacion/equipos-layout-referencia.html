@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Equipos a presión — distribución que cabe en A4</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#1a2744;--accent:#2f5aa6;--accent-2:#5b86c9;--rouge:#d32525;
+    --ink:#1a2744;--ink-2:#515b73;--ink-3:#8b93a7;
+    --line:#e7eaf1;--line-2:#d9dee9;--soft:#f3f5f9;--ok:#1f8a4c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#5b6173;font-family:'Inter',Arial,sans-serif;color:var(--ink);padding:28px 0;}
+  .doc{display:flex;flex-direction:column;align-items:center;gap:24px;}
+  .cap{width:794px;color:#dfe3ec;font-size:12px;letter-spacing:.04em;}
+  .cap b{color:#fff;}
+  .page{width:794px;height:1123px;background:#fff;position:relative;display:flex;flex-direction:column;
+    box-shadow:0 10px 40px rgba(0,0,0,.28);overflow:hidden;}
+  .label{position:absolute;top:12px;right:12px;background:var(--navy);color:#fff;font-size:9px;font-weight:700;
+    letter-spacing:.07em;text-transform:uppercase;padding:4px 10px;border-radius:5px;z-index:9;}
+
+  /* running header */
+  .rh{display:flex;align-items:center;justify-content:space-between;padding:18px 54px;border-bottom:1px solid var(--line);}
+  .rh .brand{font-size:15px;font-weight:800;letter-spacing:.02em;color:var(--navy);}
+  .rh .meta{font-size:10px;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;text-align:right;line-height:1.5;}
+  .rh .meta b{color:var(--ink-2);font-weight:600;}
+
+  .pad{flex:1;display:flex;flex-direction:column;padding:26px 54px 64px;}
+
+  .peyebrow{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:5px;}
+  .ptitle-row{display:flex;align-items:center;gap:12px;margin-bottom:32px;flex-wrap:wrap;}
+  .ptitle{font-size:21px;font-weight:800;letter-spacing:-.01em;line-height:1.12;}
+  .chip{display:inline-flex;align-items:center;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    padding:3px 9px;border-radius:999px;color:var(--accent);background:#eaf0fa;}
+  .chip.ok{color:var(--ok);background:#e6f4ec;}
+
+  /* two-column zone */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:30px;}
+  .blk-h{display:flex;align-items:center;gap:12px;margin-bottom:11px;}
+  .blk-h .t{font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);white-space:nowrap;}
+  .blk-h::after{content:"";flex:1;height:1px;background:var(--line);}
+  .blk{margin-bottom:22px;}
+
+  .kv{display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--line);}
+  .kv .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);}
+  .kv .v{font-size:11.5px;font-weight:600;text-align:right;}
+
+  table.tbl{width:100%;border-collapse:collapse;}
+  .tbl thead th{font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);
+    text-align:left;padding:7px 9px;border-bottom:2px solid var(--navy);background:var(--soft);}
+  .tbl thead th.num{text-align:right;}
+  .tbl tbody td{font-size:10px;padding:6px 9px;border-bottom:1px solid var(--line);vertical-align:top;}
+  .tbl tbody td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  .tbl .lead{font-weight:600;}.tbl .muted{color:var(--ink-3);}
+
+  .note{font-size:10px;color:var(--ink-2);background:var(--soft);border-left:3px solid var(--accent);
+    padding:9px 12px;line-height:1.5;border-radius:0 4px 4px 0;margin-bottom:20px;}
+  .note b{color:var(--ink);}
+
+  /* compact photo strip — fixed height keeps the page within A4 */
+  .photos{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:auto;}
+  .ph{border:1px solid var(--line);border-radius:5px;overflow:hidden;background:var(--soft);}
+  .ph .img{height:150px;background-size:cover;background-position:center;}
+  .ph .cap2{font-size:9px;color:var(--ink-2);padding:6px 9px;border-top:1px solid var(--line);}
+
+  .rf{position:absolute;left:54px;right:54px;bottom:20px;display:flex;justify-content:space-between;
+    font-size:9px;color:var(--ink-3);letter-spacing:.03em;padding-top:8px;border-top:1px solid var(--line);}
+  .rf b{color:var(--ink-2);font-weight:600;}
+
+  /* full-page image (acta / certificados) */
+  .page-img{padding:0;align-items:center;justify-content:center;}
+  .page-img .sheet{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#eef1f6;}
+  .page-img .sheet .mock{width:74%;height:88%;background:#fff;border:1px solid var(--line-2);
+    box-shadow:0 4px 18px rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;
+    color:var(--ink-3);font-size:13px;}
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <div class="cap"><b>Distribución A</b> — Ficha de equipo en dos columnas + tira de fotos compacta. Cabe en un A4.</div>
+  <section class="page" data-screen-label="Equipo A">
+    <div class="rh">
+      <span class="brand">CLAUGER</span>
+      <div class="meta"><b>Equipos a presión</b> &middot; Frigoríficos del Levante, S.A.</div>
+    </div>
+    <div class="pad">
+      <div class="peyebrow">Equipo &middot; Recipiente a presión</div>
+      <div class="ptitle-row">
+        <div class="ptitle">Separador de líquido SL‑400</div>
+        <span class="chip">Categoría IV</span>
+        <span class="chip ok">Favorable</span>
+      </div>
+
+      <div class="cols">
+        <div>
+          <div class="blk">
+            <div class="blk-h"><span class="t">Identificación</span></div>
+            <div class="kv"><span class="k">Fabricante</span><span class="v">Frimetal</span></div>
+            <div class="kv"><span class="k">Modelo</span><span class="v">SL‑400</span></div>
+            <div class="kv"><span class="k">Nº serie</span><span class="v">FR‑2008‑1142</span></div>
+            <div class="kv"><span class="k">Nº placa industria</span><span class="v">VA‑08‑4471</span></div>
+            <div class="kv"><span class="k">Fecha fabricación</span><span class="v">2008</span></div>
+            <div class="kv"><span class="k">Normativa</span><span class="v">PED 97/23/CE</span></div>
+            <div class="kv"><span class="k">Ubicación</span><span class="v">Sala de máquinas</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="blk">
+            <div class="blk-h"><span class="t">Condiciones de operación</span></div>
+            <div class="kv"><span class="k">Fluido</span><span class="v">R‑717 (NH₃)</span></div>
+            <div class="kv"><span class="k">Volumen interno</span><span class="v">400 L</span></div>
+            <div class="kv"><span class="k">Presión máx.</span><span class="v">19 bar</span></div>
+            <div class="kv"><span class="k">Presión mín.</span><span class="v">−1 bar</span></div>
+            <div class="kv"><span class="k">Presostato AP</span><span class="v">17,5 bar</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk">
+        <div class="blk-h"><span class="t">Válvulas de seguridad</span></div>
+        <table class="tbl">
+          <thead><tr><th style="width:24px">#</th><th>Marca</th><th>Nº serie</th><th class="num">Tarado</th><th>Acción</th><th>Fecha</th></tr></thead>
+          <tbody>
+            <tr><td style="font-weight:700;text-align:center">1</td><td class="lead">Herose</td><td class="muted">H‑44120</td><td class="num">19 bar</td><td>Conducida a exterior</td><td class="muted">03/2025</td></tr>
+            <tr><td style="font-weight:700;text-align:center">2</td><td class="lead">Herose</td><td class="muted">H‑44121</td><td class="num">19 bar</td><td>Conducida a exterior</td><td class="muted">03/2025</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note"><b>Observaciones:</b> Aislamiento en buen estado. Se recomienda revisar el soporte antivibratorio en la próxima visita.</div>
+
+      <div class="photos">
+        <div class="ph"><div class="img" style="background-image:linear-gradient(135deg,#c7d3e6,#9fb4d4)"></div><div class="cap2">Placa de características</div></div>
+        <div class="ph"><div class="img" style="background-image:linear-gradient(135deg,#cdd9c8,#a9c0a4)"></div><div class="cap2">Vista general</div></div>
+        <div class="ph"><div class="img" style="background-image:linear-gradient(135deg,#e6d3c7,#d4b49f)"></div><div class="cap2">Válvulas PSV</div></div>
+      </div>
+    </div>
+    <div class="rf"><span><b>CLAUGER Ibérica, S.L.U.</b> &middot; Documento confidencial</span><span>INST‑2024‑118 &middot; pág. 21</span></div>
+  </section>
+
+  <div class="cap"><b>Distribución B</b> — Equipo de mucha info (lado A/B): identificación arriba, tabla comparativa, fotos a 2 columnas. Sigue cabiendo, y si no cabe rompe por bloques limpios.</div>
+  <section class="page" data-screen-label="Equipo B">
+    <div class="rh">
+      <span class="brand">CLAUGER</span>
+      <div class="meta"><b>Equipos a presión</b> &middot; Frigoríficos del Levante, S.A.</div>
+    </div>
+    <div class="pad">
+      <div class="peyebrow">Equipo &middot; Intercambiador</div>
+      <div class="ptitle-row">
+        <div class="ptitle">Condensador evaporativo CE‑900</div>
+        <span class="chip">Categoría III</span>
+      </div>
+
+      <div class="blk">
+        <div class="blk-h"><span class="t">Identificación</span></div>
+        <div class="cols">
+          <div>
+            <div class="kv"><span class="k">Fabricante</span><span class="v">Baltimore</span></div>
+            <div class="kv"><span class="k">Modelo</span><span class="v">CE‑900</span></div>
+            <div class="kv"><span class="k">Nº serie</span><span class="v">BAC‑11‑7782</span></div>
+          </div>
+          <div>
+            <div class="kv"><span class="k">Nº placa industria</span><span class="v">VA‑11‑9920</span></div>
+            <div class="kv"><span class="k">Fecha fabricación</span><span class="v">2011</span></div>
+            <div class="kv"><span class="k">Ubicación</span><span class="v">Cubierta</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk">
+        <div class="blk-h"><span class="t">Condiciones de operación</span></div>
+        <table class="tbl">
+          <thead><tr><th style="width:40%;background:var(--soft)">Parámetro</th><th>Lado A</th><th>Lado B</th></tr></thead>
+          <tbody>
+            <tr><td>Fluido</td><td>R‑717 (NH₃)</td><td>Agua</td></tr>
+            <tr><td>Volumen interno (L)</td><td>180</td><td>540</td></tr>
+            <tr><td>Presión máx. (bar)</td><td>19</td><td>6</td></tr>
+            <tr><td>Presión mín. (bar)</td><td>−1</td><td>0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="blk">
+        <div class="blk-h"><span class="t">Fotografías</span></div>
+        <div class="photos" style="grid-template-columns:1fr 1fr;">
+          <div class="ph"><div class="img" style="background-image:linear-gradient(135deg,#c7d3e6,#9fb4d4)"></div><div class="cap2">Placa de características</div></div>
+          <div class="ph"><div class="img" style="background-image:linear-gradient(135deg,#cdd9c8,#a9c0a4)"></div><div class="cap2">Vista general</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="rf"><span><b>CLAUGER Ibérica, S.L.U.</b> &middot; Documento confidencial</span><span>INST‑2024‑118 &middot; pág. 22</span></div>
+  </section>
+
+  <div class="cap"><b>Páginas de imagen (Acta, certificados PSV, detectores)</b> — alto fijo + imagen centrada con <b>max-height</b>. Así NO aparecen hojas en blanco entre ellas.</div>
+  <section class="page page-img" data-screen-label="Imagen">
+    <div class="sheet"><div class="mock">Página PDF escaneada<br>(centrada, sin desbordar el A4)</div></div>
+  </section>
+
+</div>
+</body>
+</html>

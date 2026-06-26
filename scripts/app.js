@@ -37,10 +37,30 @@ const ICONS = {
 };
 const ic = name => ICONS[name] || '';
 
+// Referencia al FileSystemFileHandle del archivo activo (File System Access API)
+let _fileHandle = null;
+
 const App = {
     init() {
         console.log('🎯 Inicializando App - Modo Legal:', AppState.isLegalMode);
         this.initializeSectionsData();
+        // Unidad Compresora por defecto (solo modo técnico, solo si está vacío)
+        if (!AppState.isLegalMode && !AppState.equipmentData['Unidad Compresora']?.length) {
+            AppState.equipmentData['Unidad Compresora'] = [{
+                identificador: '', fabricante: '', modelo: '', numSerie: '',
+                subEquipments: {
+                    'Bloque Compresor': [{
+                        fabricante: '', modelo: '', numSerie: '', numPlaca: '', fechaFabricacion: '',
+                        normativa: '', ubicacion: '', categoria: '', observaciones: '',
+                        photos: {placa: null, general: null}, imagenes: [],
+                        fluido: '', volInterno: '', presionMax: '', presionMin: '',
+                        valvulas: {marca: '', modelo: '', sifon: '', items: []},
+                        resultadoForzado: false, presostato: '', presionRegulacion: ''
+                    }]
+                }
+            }];
+            AppState.expandedEquipment['Unidad Compresora_0'] = true;
+        }
         this.setupEventListeners();
         // Show legal-only tabs only in legal mode
         document.querySelectorAll('.nav-tab[data-legal-only]').forEach(tab => {
@@ -101,12 +121,36 @@ const App = {
         document.getElementById('imageModal').onclick = (e) => {
             if (e.target.id === 'imageModal') this.closeImageModal();
         };
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') { e.preventDefault(); this.undo(); }
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); this.redo(); }
+        });
+    },
+
+    // ── Restore dialog ───────────────────────────────────────────────────────
+    _showRestoreDialog(snap, when, onRestore, onNew) {
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+        ov.innerHTML = `
+            <div style="background:#fff;border-radius:12px;padding:2rem;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center;font-family:inherit">
+                <div style="font-size:2rem;margin-bottom:.5rem">📂</div>
+                <h2 style="margin:0 0 .4rem;font-size:1.1rem;color:#1a2744">Sesión guardada encontrada</h2>
+                <p style="margin:0 0 1.5rem;color:#64748b;font-size:.85rem">${when}</p>
+                <div style="display:flex;flex-direction:column;gap:.6rem">
+                    <button id="_dlgRestore" style="padding:.75rem 1rem;background:#2f5aa6;color:#fff;border:none;border-radius:8px;font-size:.95rem;font-weight:600;cursor:pointer">Restaurar sesión anterior</button>
+                    <button id="_dlgNew" style="padding:.75rem 1rem;background:transparent;color:#64748b;border:1px solid #e2e8f0;border-radius:8px;font-size:.9rem;cursor:pointer">Empezar sesión nueva</button>
+                </div>
+            </div>`;
+        document.body.appendChild(ov);
+        ov.querySelector('#_dlgRestore').onclick = () => { document.body.removeChild(ov); onRestore(); };
+        ov.querySelector('#_dlgNew').onclick    = () => { document.body.removeChild(ov); onNew(); };
     },
 
     // ── Autosave ──────────────────────────────────────────────────────────────
     _badgeFadeTimer: null,
 
     _doAutosave() {
+        this._saveHistory();
         try {
             const termografiaExport = (AppState.termografiaData || []).map(t => {
                 const copy = Object.assign({}, t);
@@ -325,10 +369,12 @@ const App = {
 
     renderValvulas(valvulas, context, lado = 'single') {
         const {equipKey, index, isSubEquip, subType, subIdx} = context;
-        const items       = valvulas?.items  || [];
-        const psvMarca    = valvulas?.marca   || '';
-        const psvModelo   = valvulas?.modelo  || '';
-        const psvSifon    = valvulas?.sifon   || '';
+        const items        = valvulas?.items  || [];
+        const psvMarca              = valvulas?.marca   || '';
+        const psvModelo             = valvulas?.modelo  || '';
+        const psvSifon              = valvulas?.sifon   || '';
+        const tipoConexionEntrada   = valvulas?.tipoConexionEntrada || '';
+        const tipoConexionSalida    = valvulas?.tipoConexionSalida  || '';
 
         const addFn    = isSubEquip ? `App.addValvulaSub('${equipKey}',${index},'${subType}',${subIdx},'${lado}')` : `App.addValvula('${equipKey}',${index},'${lado}')`;
         const removeFn = (vIdx) => isSubEquip ? `App.removeValvulaSub('${equipKey}',${index},'${subType}',${subIdx},'${lado}',${vIdx})` : `App.removeValvula('${equipKey}',${index},'${lado}',${vIdx})`;
@@ -336,64 +382,111 @@ const App = {
         const rowFn    = (vIdx, field, val) => isSubEquip ? `App.setPsvRowSub('${equipKey}',${index},'${subType}',${subIdx},'${lado}',${vIdx},'${field}','${val}')` : `App.setPsvRow('${equipKey}',${index},'${lado}',${vIdx},'${field}','${val}')`;
         const ciFn     = (vIdx, field) => isSubEquip ? `App.updatePsvCiSub('${equipKey}',${index},'${subType}',${subIdx},'${lado}',${vIdx},'${field}',this.value)` : `App.updatePsvCi('${equipKey}',${index},'${lado}',${vIdx},'${field}',this.value)`;
 
-        const yesNo    = (vIdx, field, state) => `<div class="seg seg--mini"><button class="${state==='si'?'seg-on-ok':''}" onclick="${rowFn(vIdx,field,'si')}">Sí</button><button class="${state==='no'?'seg-on-bad':''}" onclick="${rowFn(vIdx,field,'no')}">No</button></div>`;
-        const yesNoS   = (vIdx, state)        => `<div class="seg seg--mini"><button class="${state==='si'?'seg-on-ok':''}" onclick="${rowFn(vIdx,'sustitucion','si')}">Sí</button><button class="${state==='no'?'seg-on-na':''}" onclick="${rowFn(vIdx,'sustitucion','no')}">No</button></div>`;
-        const sifonSeg = `<div class="seg seg--mini"><button class="${psvSifon==='si'?'seg-on-ok':''}" onclick="${isSubEquip?`App.setPsvGenSub('${equipKey}',${index},'${subType}',${subIdx},'${lado}','sifon','si')`:`App.setPsvGen('${equipKey}',${index},'${lado}','sifon','si')`}">Sí</button><button class="${psvSifon==='no'?'seg-on-bad':''}" onclick="${isSubEquip?`App.setPsvGenSub('${equipKey}',${index},'${subType}',${subIdx},'${lado}','sifon','no')`:`App.setPsvGen('${equipKey}',${index},'${lado}','sifon','no')`}">No</button></div>`;
+        const BRANDS = ['AWP','DANFOSS','CAEN','CASTEL','HERL','HANSEN','NGI','GMC','TOSACA','LESER','HANSA','FAVRE'];
+        const uid = `${isSubEquip ? `s-${String(subType).replace(/\s+/g,'-')}-${subIdx}-` : ''}${String(equipKey).replace(/\s+/g,'-')}-${index}-${lado}`;
+
+        const yesNo = (vIdx, field, state) => `<div class="seg seg--mini"><button class="${state==='si'?'seg-on-ok':''}" onclick="${rowFn(vIdx,field,'si')}">Sí</button><button class="${state==='no'?'seg-on-bad':''}" onclick="${rowFn(vIdx,field,'no')}">No</button></div>`;
+        const isLegal = AppState.isLegalMode;
 
         const sideLabel = lado === 'A' ? 'Lado A' : lado === 'B' ? 'Lado B' : 'Válvulas de Seguridad';
+
+        const setTcEntFn = (opt) => isSubEquip
+            ? `App.setPsvGenSub('${equipKey}',${index},'${subType}',${subIdx},'${lado}','tipoConexionEntrada','${opt}');App.selectAwpConexion('awp-picker-ent-${uid}','awp-wrap-ent-${uid}','${opt}')`
+            : `App.setPsvGen('${equipKey}',${index},'${lado}','tipoConexionEntrada','${opt}');App.selectAwpConexion('awp-picker-ent-${uid}','awp-wrap-ent-${uid}','${opt}')`;
+        const setTcSalFn = (opt) => isSubEquip
+            ? `App.setPsvGenSub('${equipKey}',${index},'${subType}',${subIdx},'${lado}','tipoConexionSalida','${opt}');App.selectAwpConexion('awp-picker-sal-${uid}','awp-wrap-sal-${uid}','${opt}')`
+            : `App.setPsvGen('${equipKey}',${index},'${lado}','tipoConexionSalida','${opt}');App.selectAwpConexion('awp-picker-sal-${uid}','awp-wrap-sal-${uid}','${opt}')`;
 
         return `
             <div class="lado-section${lado === 'B' ? ' lado-b' : ''}">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
-                    <div class="lado-label" style="margin-bottom:0">${sideLabel}</div>
+                    <div class="lado-label" style="margin-bottom:0">${sideLabel}${typeof Ayudante !== 'undefined' ? Ayudante.psvInfoIconHtml() : ''}</div>
                     <button class="add-vs-btn" onclick="${addFn}" style="margin:0">${ic('plus')} Añadir Válvula</button>
                 </div>
+                ${items.length > 0 ? `
                 <div class="psv-gen">
                     <span class="psv-tag">PSV</span>
-                    <label class="pg-f">Marca<input class="pg" value="${psvMarca}" onchange="${genFn('marca')}"></label>
+                    <label class="pg-f">Marca
+                        <select class="pg pg--marca" onchange="${genFn('marca')};App.onPsvMarcaChange(this,'awp-wrap-ent-${uid}','awp-wrap-sal-${uid}')">
+                            <option value="">—</option>
+                            ${BRANDS.map(b => `<option value="${b}"${psvMarca===b?' selected':''}>${b}</option>`).join('')}
+                        </select>
+                    </label>
                     <label class="pg-f">Modelo<input class="pg" value="${psvModelo}" onchange="${genFn('modelo')}"></label>
-                    <span class="pg-f" style="gap:8px">Sifón ${sifonSeg}</span>
+                    <label class="pg-f" style="gap:8px">Indicador de descarga
+                        <select class="pg" onchange="${genFn('sifon')}">
+                            <option value="">—</option>
+                            <option value="No"${psvSifon==='No'?' selected':''}>No</option>
+                            <option value="Luz"${psvSifon==='Luz'?' selected':''}>Luz</option>
+                            <option value="Sifón"${psvSifon==='Sifón'?' selected':''}>Sifón</option>
+                        </select>
+                    </label>
+                    <div class="awp-picker-wrap" id="awp-wrap-ent-${uid}"${psvMarca==='AWP'?'':' style="display:none"'}>
+                        <button type="button" class="awp-icon-btn" onclick="App.toggleAwpPicker('awp-picker-ent-${uid}')">
+                            <div class="awp-icons-row">
+                                <img src="imagenes/tipo de conexión.png" class="awp-icon">
+                                ${tipoConexionEntrada ? `<img src="imagenes/${tipoConexionEntrada}.png" class="awp-sel-img">` : ''}
+                            </div>
+                            <span class="awp-icon-label">Tipo de conexión entrada</span>
+                        </button>
+                        <div class="awp-picker" id="awp-picker-ent-${uid}">
+                            ${['AWP 1','AWP 2','AWP 3'].map(opt => `
+                                <div class="awp-opt${tipoConexionEntrada===opt?' awp-opt--sel':''}" data-val="${opt}" onclick="${setTcEntFn(opt)}">
+                                    <img src="imagenes/${opt}.png"><span>${opt}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div class="awp-picker-wrap" id="awp-wrap-sal-${uid}"${psvMarca==='AWP'?'':' style="display:none"'}>
+                        <button type="button" class="awp-icon-btn" onclick="App.toggleAwpPicker('awp-picker-sal-${uid}')">
+                            <div class="awp-icons-row">
+                                <img src="imagenes/tipo de conexión.png" class="awp-icon">
+                                ${tipoConexionSalida ? `<img src="imagenes/${tipoConexionSalida}.png" class="awp-sel-img">` : ''}
+                            </div>
+                            <span class="awp-icon-label">Tipo de conexión salida</span>
+                        </button>
+                        <div class="awp-picker" id="awp-picker-sal-${uid}">
+                            ${['AWP 1','AWP 2','AWP 3'].map(opt => `
+                                <div class="awp-opt${tipoConexionSalida===opt?' awp-opt--sel':''}" data-val="${opt}" onclick="${setTcSalFn(opt)}">
+                                    <img src="imagenes/${opt}.png"><span>${opt}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
                 </div>
-                ${items.length > 0 ? `
-                <table class="vtab--pair">
-                    <colgroup>
-                        <col style="width:10%"><col style="width:7%"><col style="width:6%"><col style="width:6%">
-                        <col style="width:10%"><col style="width:10%">
-                        <col style="width:8%">
-                        <col style="width:10%"><col style="width:7%"><col style="width:6%"><col style="width:6%">
-                        <col style="width:14%">
-                    </colgroup>
+                <table class="vtab--pair" style="width:100%;table-layout:auto">
                     <thead>
                         <tr class="vgrp">
-                            <th colspan="4" class="g-old">Válvula existente</th>
-                            <th colspan="2" class="g-insp">Inspección</th>
-                            <th class="g-sust">Sustit.</th>
-                            <th colspan="4" class="g-new">Válvula nueva</th>
-                            <th class="g-insp"></th>
+                            <th colspan="5" class="g-old">Válvula existente</th>
+                            ${isLegal ? '<th colspan="3"></th>' : ''}
+                            <th colspan="5" class="g-new">Válvula nueva</th>
+                            <th></th>
                         </tr>
                         <tr class="vsub">
-                            <th>Nº serie</th><th>Tarado <span>bar</span></th><th>DN ent.</th><th>DN sal.</th>
-                            <th>Insp. visual</th><th>Verif. disparo</th>
-                            <th>Sí / No</th>
-                            <th>Nº serie</th><th>Tarado <span>bar</span></th><th>DN ent.</th><th>DN sal.</th>
+                            <th>Nº serie</th><th>DN ent.</th><th>Fecha fab.</th><th>Tarado <span>bar</span></th><th>DN sal.</th>
+                            ${isLegal ? '<th>Inspección Visual</th><th>Verif. Disparo / Retimbrado</th><th>Sustitución</th>' : ''}
+                            <th>Nº serie</th><th>DN ent.</th><th>Fecha fab.</th><th>Tarado <span>bar</span></th><th>DN sal.</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         ${items.map((valv, vIdx) => {
-                            const sust = valv.sustitucion === 'si';
-                            const nc = (val, field) => sust ? `<input class="ci" value="${val||''}" onchange="${ciFn(vIdx,field)}">` : `<input class="ci ci--empty" value="" placeholder="—" disabled>`;
+                            const nc = (val, field) => `<input class="ci" value="${val||''}" onchange="${ciFn(vIdx,field)}">`;
                             return `<tr>
                                 <td><input class="ci" value="${valv.serieExistente||''}" onchange="${ciFn(vIdx,'serieExistente')}"></td>
-                                <td><input class="ci" value="${valv.presionExistente||''}" onchange="${ciFn(vIdx,'presionExistente')}"></td>
                                 <td><input class="ci" value="${valv.dnEntradaExistente||''}" onchange="${ciFn(vIdx,'dnEntradaExistente')}"></td>
+                                <td><input class="ci" value="${valv.fechaFabricacionExistente||''}" onchange="${ciFn(vIdx,'fechaFabricacionExistente')}"></td>
+                                <td><input class="ci" value="${valv.presionExistente||''}" onchange="${ciFn(vIdx,'presionExistente')}"></td>
                                 <td><input class="ci" value="${valv.dnSalidaExistente||''}" onchange="${ciFn(vIdx,'dnSalidaExistente')}"></td>
+                                ${isLegal ? `
                                 <td class="vc-insp">${yesNo(vIdx,'inspVisual',valv.inspVisual||'')}</td>
                                 <td class="vc-insp">${yesNo(vIdx,'verificacionDisparo',valv.verificacionDisparo||'')}</td>
-                                <td class="vc-sust">${yesNoS(vIdx,valv.sustitucion||'')}</td>
+                                <td class="vc-sust">${yesNo(vIdx,'sustitucion',valv.sustitucion||'')}</td>
+                                ` : ''}
                                 <td class="vc-new">${nc(valv.serieNueva,'serieNueva')}</td>
-                                <td class="vc-new">${nc(valv.presionNueva,'presionNueva')}</td>
                                 <td class="vc-new">${nc(valv.dnEntradaNueva,'dnEntradaNueva')}</td>
+                                <td class="vc-new">${nc(valv.fechaFabricacionNueva,'fechaFabricacionNueva')}</td>
+                                <td class="vc-new">${nc(valv.presionNueva,'presionNueva')}</td>
                                 <td class="vc-new">${nc(valv.dnSalidaNueva,'dnSalidaNueva')}</td>
                                 <td class="vc-del"><button class="remove-vs-btn" onclick="${removeFn(vIdx)}">${ic('trash')}</button></td>
                             </tr>`;
@@ -451,42 +544,51 @@ const App = {
         });
     },
 
-    _pickImages(onFiles) {
+    _pickImages(onFiles, capture) {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
-        input.multiple = true;
+        if (capture) { input.capture = 'environment'; } else { input.multiple = true; }
         input.onchange = e => { if (e.target.files.length) onFiles(Array.from(e.target.files)); };
         input.click();
     },
 
     renderPhotoSection(photos, context) {
         const {equipKey, index, isSubEquip, subType, subIdx} = context;
-        const uploadFunc = (type) => isSubEquip ? `App.uploadPhotoSub('${equipKey}',${index},'${subType}',${subIdx},'${type}')`
-                                                : `App.uploadPhoto('${equipKey}',${index},'${type}')`;
-        const removeFunc = (type) => isSubEquip ? `App.removePhotoSub('${equipKey}',${index},'${subType}',${subIdx},'${type}')`
-                                                : `App.removePhoto('${equipKey}',${index},'${type}')`;
-        const togglePhotoFunc = (type) => isSubEquip
-            ? `App.toggleEquipSubPhotoIncluir('${equipKey}',${index},'${subType}',${subIdx},'${type}')`
-            : `App.toggleEquipPhotoIncluir('${equipKey}',${index},'${type}')`;
+        const uploadFunc = (type) => isSubEquip ? `App.uploadPhotoSub('${equipKey}',${index},'${subType}',${subIdx},'${type}')` : `App.uploadPhoto('${equipKey}',${index},'${type}')`;
+        const uploadCamFunc = (type) => isSubEquip ? `App.uploadPhotoSubCam('${equipKey}',${index},'${subType}',${subIdx},'${type}')` : `App.uploadPhotoCam('${equipKey}',${index},'${type}')`;
+        const removeFunc = (type) => isSubEquip ? `App.removePhotoSub('${equipKey}',${index},'${subType}',${subIdx},'${type}')` : `App.removePhoto('${equipKey}',${index},'${type}')`;
+        const dropSlotFunc = (type) => isSubEquip ? `App.dropPhotoSlotSub(event,'${equipKey}',${index},'${subType}',${subIdx},'${type}')` : `App.dropPhotoSlot(event,'${equipKey}',${index},'${type}')`;
+        const togglePhotoFunc = (type) => isSubEquip ? `App.toggleEquipSubPhotoIncluir('${equipKey}',${index},'${subType}',${subIdx},'${type}')` : `App.toggleEquipPhotoIncluir('${equipKey}',${index},'${type}')`;
+        const uploadExtFunc = isSubEquip ? `App.uploadEquipSubImages('${equipKey}',${index},'${subType}',${subIdx})` : `App.uploadEquipImages('${equipKey}',${index})`;
+        const uploadExtCamFunc = isSubEquip ? `App.uploadEquipSubImagesCam('${equipKey}',${index},'${subType}',${subIdx})` : `App.uploadEquipImagesCam('${equipKey}',${index})`;
+        const dropExtFunc = isSubEquip ? `App.dropEquipSubImages(event,'${equipKey}',${index},'${subType}',${subIdx})` : `App.dropEquipImages(event,'${equipKey}',${index})`;
 
         const galImages = isSubEquip
             ? (AppState.equipmentData[equipKey]?.[index]?.subEquipments?.[subType]?.[subIdx]?.imagenes || [])
             : (AppState.equipmentData[equipKey]?.[index]?.imagenes || []);
 
-        const galleryHtml = AppState.isLegalMode ? `
-            <div style="margin-top:1rem">
-                <div class="form-section-title">${ic('camera')} Imágenes Adicionales</div>
-                ${this._legalImgSectionHtml(
-                    '',
-                    galImages,
-                    isSubEquip ? `App.dropEquipSubImages(event,'${equipKey}',${index},'${subType}',${subIdx})` : `App.dropEquipImages(event,'${equipKey}',${index})`,
-                    isSubEquip ? `App.uploadEquipSubImages('${equipKey}',${index},'${subType}',${subIdx})` : `App.uploadEquipImages('${equipKey}',${index})`,
-                    isSubEquip ? `App.removeEquipSubImage('${equipKey}',${index},'${subType}',${subIdx},{i})` : `App.removeEquipImage('${equipKey}',${index},{i})`,
-                    isSubEquip ? `App.toggleEquipSubImagePdf('${equipKey}',${index},'${subType}',${subIdx},{i})` : `App.toggleEquipImagePdf('${equipKey}',${index},{i})`
-                )}
+        const extraPhotosHtml = `
+            <div class="extra-photos-section" style="margin-top:1rem">
+                ${galImages.length > 0 ? `
+                    <div class="photo-grid">
+                        ${galImages.map((img, idx) => {
+                            const removeExtraFn = isSubEquip ? `App.removeEquipSubImage('${equipKey}',${index},'${subType}',${subIdx},${idx})` : `App.removeEquipImage('${equipKey}',${index},${idx})`;
+                            const togglePdfFn = isSubEquip ? `App.toggleEquipSubImagePdf('${equipKey}',${index},'${subType}',${subIdx},${idx})` : `App.toggleEquipImagePdf('${equipKey}',${index},${idx})`;
+                            return `<div class="photo-preview" style="position:relative">
+                                <img src="${img.data}" onclick="App.viewImage('${img.data}')" style="cursor:pointer">
+                                <button class="photo-remove" onclick="${removeExtraFn}">×</button>
+                                ${AppState.isLegalMode ? `<div style="position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:flex-end;padding:4px 6px;background:rgba(0,0,0,0.55)"><button onclick="${togglePdfFn}" style="background:${img.incluirEnPdf===false?'#6b7280':'#16a34a'};color:white;border:none;border-radius:3px;padding:1px 7px;font-size:0.68rem;cursor:pointer;font-weight:700">${img.incluirEnPdf===false?'PDF ✗':'PDF ✓'}</button></div>` : ''}
+                            </div>`;
+                        }).join('')}
+                    </div>
+                ` : ''}
+                <div class="extra-add-row" ondragover="event.preventDefault()" ondrop="${dropExtFunc}">
+                    <button type="button" class="extra-photo-btn" onclick="App._showPhotoSourceDialog(()=>{${uploadExtCamFunc}},()=>{${uploadExtFunc}})">${ic('camera')} Añadir foto</button>
+                    <span style="font-size:10px;color:var(--ink-3)">o arrastra aquí</span>
+                </div>
             </div>
-        ` : '';
+        `;
 
         return `
             <div class="photo-section">
@@ -496,7 +598,7 @@ const App = {
                         <div>
                             <label class="form-label">${type === 'placa' ? 'Placa de Características' : 'General'}</label>
                             ${photos[type] ? `
-                                <div class="photo-preview" style="position:relative">
+                                <div class="photo-preview" style="position:relative" ondragover="event.preventDefault()" ondrop="${dropSlotFunc(type)}">
                                     <img src="${photos[type]}" onclick="App.viewImage('${photos[type]}')">
                                     <button class="photo-remove" onclick="${removeFunc(type)}">×</button>
                                     ${AppState.isLegalMode ? `
@@ -506,15 +608,16 @@ const App = {
                                     ` : ''}
                                 </div>
                             ` : `
-                                <div class="photo-upload" onclick="${uploadFunc(type)}">
-                                    <div style="margin-bottom:0.5rem;color:#6b7280">${ic('camera')}</div>
-                                    <div style="font-size:0.875rem;color:#6b7280;font-weight:600">Subir Foto ${type === 'placa' ? 'Placa' : 'General'}</div>
+                                <div class="photo-upload" ondragover="event.preventDefault()" ondrop="${dropSlotFunc(type)}" onclick="App._showPhotoSourceDialog(()=>{${uploadCamFunc(type)}},()=>{${uploadFunc(type)}})">
+                                    <div style="margin-bottom:0.25rem;color:#6b7280">${ic('camera')}</div>
+                                    <div style="font-size:0.8rem;color:#6b7280;font-weight:600;margin-bottom:0.25rem">${type === 'placa' ? 'Placa de Características' : 'General'}</div>
+                                    <div style="font-size:0.75rem;color:#9ca3af">Toca para añadir</div>
                                 </div>
                             `}
                         </div>
                     `).join('')}
                 </div>
-                ${galleryHtml}
+                ${extraPhotosHtml}
             </div>
         `;
     },
@@ -526,8 +629,7 @@ const App = {
         const valvKey = lado === 'single' ? 'valvulas' : `valvulas${lado}`;
         
         if (action === 'add') {
-            if (!equipment[valvKey]) equipment[valvKey] = {items: []};
-            if (!equipment[valvKey]) equipment[valvKey] = {marca:'', modelo:'', sifon:'', items:[]};
+            if (!equipment[valvKey]) equipment[valvKey] = {marca:'', modelo:'', sifon:'', tipoConexion:'', items:[]};
             equipment[valvKey].items.push({serieExistente:'', presionExistente:'', dnEntradaExistente:'', dnSalidaExistente:'', inspVisual:'', verificacionDisparo:'', sustitucion:'', serieNueva:'', presionNueva:'', dnEntradaNueva:'', dnSalidaNueva:''});
             this.showToast('Válvula añadida', 'success');
         } else if (action === 'remove' && confirm('¿Eliminar esta válvula?')) {
@@ -543,15 +645,16 @@ const App = {
     addValvulaSub(equipKey, index, subType, subIdx, lado) { this.manageValvula('add', equipKey, index, lado, undefined, subType, subIdx); },
     removeValvulaSub(equipKey, index, subType, subIdx, lado, valvIdx) { this.manageValvula('remove', equipKey, index, lado, valvIdx, subType, subIdx); },
 
-    managePhoto(action, equipKey, index, photoType, subType, subIdx) {
+    managePhoto(action, equipKey, index, photoType, subType, subIdx, capture) {
         const isSubEquip = subType !== undefined;
-        const equipment = isSubEquip ? AppState.equipmentData[equipKey][index].subEquipments[subType][subIdx] 
+        const equipment = isSubEquip ? AppState.equipmentData[equipKey][index].subEquipments[subType][subIdx]
                                      : AppState.equipmentData[equipKey][index];
-        
+
         if (action === 'upload') {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = 'image/*';
+            if (capture) input.capture = 'environment';
             input.onchange = (e) => {
                 const file = e.target.files[0];
                 if (file) {
@@ -576,9 +679,43 @@ const App = {
     },
 
     uploadPhoto(equipKey, index, photoType) { this.managePhoto('upload', equipKey, index, photoType); },
+    uploadPhotoCam(equipKey, index, photoType) { this.managePhoto('upload', equipKey, index, photoType, undefined, undefined, true); },
     removePhoto(equipKey, index, photoType) { this.managePhoto('remove', equipKey, index, photoType); },
     uploadPhotoSub(equipKey, index, subType, subIdx, photoType) { this.managePhoto('upload', equipKey, index, photoType, subType, subIdx); },
+    uploadPhotoSubCam(equipKey, index, subType, subIdx, photoType) { this.managePhoto('upload', equipKey, index, photoType, subType, subIdx, true); },
     removePhotoSub(equipKey, index, subType, subIdx, photoType) { this.managePhoto('remove', equipKey, index, photoType, subType, subIdx); },
+    dropPhotoSlot(event, equipKey, index, photoType) {
+        event.preventDefault();
+        const file = [...(event.dataTransfer?.files || [])].find(f => f.type.startsWith('image/'));
+        if (!file) return;
+        const eq = AppState.equipmentData[equipKey][index];
+        const reader = new FileReader();
+        reader.onload = e => { if (!eq.photos) eq.photos = {}; eq.photos[photoType] = e.target.result; this.renderEquipmentList(); this._doAutosave(); };
+        reader.readAsDataURL(file);
+    },
+    dropPhotoSlotSub(event, equipKey, index, subType, subIdx, photoType) {
+        event.preventDefault();
+        const file = [...(event.dataTransfer?.files || [])].find(f => f.type.startsWith('image/'));
+        if (!file) return;
+        const sub = AppState.equipmentData[equipKey][index].subEquipments[subType][subIdx];
+        const reader = new FileReader();
+        reader.onload = e => { if (!sub.photos) sub.photos = {}; sub.photos[photoType] = e.target.result; this.renderCompositeUnitsList(); this._doAutosave(); };
+        reader.readAsDataURL(file);
+    },
+    uploadEquipImagesCam(equipKey, index) {
+        this._pickImages(files => {
+            const eq = AppState.equipmentData[equipKey][index];
+            if (!eq.imagenes) eq.imagenes = [];
+            this._readMultipleImages(files, img => eq.imagenes.push(img), () => this.renderEquipmentList());
+        }, true);
+    },
+    uploadEquipSubImagesCam(equipKey, index, subType, subIdx) {
+        this._pickImages(files => {
+            const sub = AppState.equipmentData[equipKey][index].subEquipments[subType][subIdx];
+            if (!sub.imagenes) sub.imagenes = [];
+            this._readMultipleImages(files, img => sub.imagenes.push(img), () => this.renderCompositeUnitsList());
+        }, true);
+    },
 
     viewImage(src) {
         document.getElementById('imageModal').classList.add('show');
@@ -597,20 +734,24 @@ const App = {
             Object.entries(EQUIPMENT_TYPES).forEach(([typeName, typeData]) => {
                 const mainBtn = document.createElement('button');
                 mainBtn.className = 'sidebar-btn' + (AppState.currentEquipmentType === typeName ? ' active' : '');
-                mainBtn.innerHTML = `<span class="icon">${typeData.icon}</span><span>${typeName}</span>`;
+                const ucCount = (typeData.isComposite || typeData.isSingle) ? (AppState.equipmentData[typeName]?.length || 0) : 0;
+                const ucLabel = (typeData.isComposite || typeData.isSingle) && ucCount > 0 ? `${typeName} (${ucCount})` : typeName;
+                mainBtn.innerHTML = `<span class="icon">${typeData.icon}</span><span>${ucLabel}</span>`;
                 mainBtn.onclick = () => {
                     AppState.currentEquipmentType = typeName;
-                    AppState.currentSubType = typeData.isComposite ? typeName : null;
+                    AppState.currentSubType = typeData.isSingle ? (typeData.label || typeName) : (typeData.isComposite ? typeName : null);
                     this.renderSidebar();
                     this.renderWorkspace();
                 };
                 sidebar.appendChild(mainBtn);
 
-                if (!typeData.isComposite && AppState.currentEquipmentType === typeName) {
+                if (!typeData.isComposite && !typeData.isSingle && AppState.currentEquipmentType === typeName) {
                     typeData.subTypes.forEach(subType => {
                         const subBtn = document.createElement('button');
                         subBtn.className = 'sidebar-subbtn' + (AppState.currentSubType === subType ? ' active' : '');
-                        subBtn.innerHTML = `<span style="font-size:0.75rem">▸</span><span>${subType}</span>`;
+                        const subCount = AppState.equipmentData[subType]?.length || 0;
+                        const subLabel = subCount > 0 ? `${subType} (${subCount})` : subType;
+                        subBtn.innerHTML = `<span style="font-size:0.75rem">▸</span><span>${subLabel}</span>`;
                         subBtn.onclick = () => {
                             AppState.currentSubType = subType;
                             this.renderSidebar();
@@ -646,7 +787,7 @@ const App = {
             const rfTabs = [
                 { id: 'portada',       icon: ic('home'),        label: 'Portada'                },
                 { id: 'indice',        icon: ic('list'),        label: 'Índice'                 },
-                { id: 'acta_inicial',  icon: ic('clipboard'),   label: 'Acta Final'             },
+                { id: 'acta_inicial',  icon: ic('clipboard'),   label: 'Acta'                   },
                 { id: 'equipos',       icon: ic('gear'),        label: 'Equipos'               },
                 { id: 'cert_psv',      icon: ic('paperclip'),   label: 'Cert PSV'              },
                 { id: 'verif_fugas',   icon: ic('search'),      label: 'Verif. Detector Fugas' },
@@ -678,12 +819,12 @@ const App = {
                     mainBtn.innerHTML = `<span class="icon">${typeData.icon}</span><span>${typeName}</span>`;
                     mainBtn.onclick = () => {
                         AppState.currentEquipmentType = typeName;
-                        AppState.currentSubType = typeData.isComposite ? typeName : null;
+                        AppState.currentSubType = typeData.isSingle ? (typeData.label || typeName) : (typeData.isComposite ? typeName : null);
                         this.renderSidebar();
                         this.renderWorkspace();
                     };
                     sidebar.appendChild(mainBtn);
-                    if (!typeData.isComposite && AppState.currentEquipmentType === typeName) {
+                    if (!typeData.isComposite && !typeData.isSingle && AppState.currentEquipmentType === typeName) {
                         typeData.subTypes.forEach(subType => {
                             const subBtn = document.createElement('button');
                             subBtn.className = 'sidebar-subbtn' + (AppState.currentSubType === subType ? ' active' : '');
@@ -828,13 +969,13 @@ const App = {
             workspace.innerHTML = `
                 <div class="section-card">
                     <div class="section-title">${typeData.icon} ${AppState.currentSubType}</div>
-                    <button class="add-equipment-btn" onclick="App.${typeData.isComposite ? 'addCompositeUnit' : 'addEquipment'}()">
+                    <button class="add-equipment-btn" onclick="App.${typeData.isSingle ? 'addEquipoServicio' : (typeData.isComposite ? 'addCompositeUnit' : 'addEquipment')}()">
                         ${ic('plus')} Añadir ${AppState.currentSubType}
                     </button>
                     <div class="equipment-list" id="equipmentList"></div>
                 </div>
             `;
-            typeData.isComposite ? this.renderCompositeUnitsList() : this.renderEquipmentList();
+            typeData.isSingle ? this.renderEquipoServiciosList() : (typeData.isComposite ? this.renderCompositeUnitsList() : this.renderEquipmentList());
         } else if (AppState.currentPage === 'verif_fugas') {
             if (AppState.currentDetector === null) {
                 workspace.innerHTML = `<div class="empty-workspace"><div><div class="empty-icon">${ic('search')}</div><div style="font-size:1.25rem;font-weight:bold;margin-bottom:0.5rem">Selecciona o agrega un detector</div><p>Usa el menú lateral para comenzar</p></div></div>`;
@@ -859,12 +1000,12 @@ const App = {
                       workspace.innerHTML = `
                           <div class="section-card">
                               <div class="section-title">${typeData.icon} ${AppState.currentSubType}</div>
-                              <button class="add-equipment-btn" onclick="App.${typeData.isComposite ? 'addCompositeUnit' : 'addEquipment'}()">
+                              <button class="add-equipment-btn" onclick="App.${typeData.isSingle ? 'addEquipoServicio' : (typeData.isComposite ? 'addCompositeUnit' : 'addEquipment')}()">
                                   ${ic('plus')} Añadir ${AppState.currentSubType}
                               </button>
                               <div class="equipment-list" id="equipmentList"></div>
                           </div>`;
-                      typeData.isComposite ? this.renderCompositeUnitsList() : this.renderEquipmentList();
+                      typeData.isSingle ? this.renderEquipoServiciosList() : (typeData.isComposite ? this.renderCompositeUnitsList() : this.renderEquipmentList());
                   }
               } else if (tab === 'verif_fugas') {
                   if (AppState.currentDetector === null) {
@@ -1016,8 +1157,6 @@ const App = {
                                 <option value="Doble" ${servicio.dispositivoLlamada === 'Doble' ? 'selected' : ''}>Doble</option>
                             </select>
                         </div>
-                    </div>
-                    <div class="form-row">
                         <div class="form-col">
                             <label class="form-label">Funciona</label>
                             <select class="form-input" data-servicio="funciona">
@@ -1251,7 +1390,7 @@ const App = {
                             `App.toggleDetectorImagePdf(${idx},{i})`
                           )
                         : `
-                          <div class="photo-upload" onclick="App.uploadDetectorImage(${idx})" style="margin-bottom:1rem">
+                          <div class="photo-upload" onclick="App._showPhotoSourceDialog(()=>{App.uploadDetectorImage(${idx})},()=>{App.uploadDetectorImages(${idx})})" style="margin-bottom:1rem">
                               <div style="margin-bottom:0.5rem;color:#6b7280">${ic('camera')}</div>
                               <div style="font-size:0.875rem;color:#6b7280;font-weight:600">Añadir Imagen</div>
                           </div>
@@ -1272,7 +1411,16 @@ const App = {
 
                 <div class="form-section">
                     <div class="form-section-title">${ic('message')} OBSERVACIONES / COMENTARIOS</div>
-                    <textarea class="form-input" data-detector="observaciones" rows="6">${detector.observaciones}</textarea>
+                    <div style="display:grid;grid-template-columns:${AppState.isLegalMode ? '1fr 1fr' : '1fr'};gap:0.75rem">
+                        <div>
+                            <label class="form-label">Observaciones - Técnico</label>
+                            <textarea class="form-input" data-detector="observaciones" rows="6">${detector.observaciones}</textarea>
+                        </div>
+                        ${AppState.isLegalMode ? `<div>
+                            <label class="form-label">Observaciones - Legal</label>
+                            <textarea class="form-input" data-detector="observacionesLegal" rows="6">${detector.observacionesLegal||''}</textarea>
+                        </div>` : ''}
+                    </div>
                 </div>
 
                 <div class="form-section">
@@ -1699,6 +1847,26 @@ const App = {
                     }
                 }
 
+                // Sync NÚMERO REVISIÓN entre Certificado y Datos del Informe
+                if (e.target.dataset.field === 'NÚMERO REVISIÓN') {
+                    ['datos_datos_certificado', 'datos_datos_informe'].forEach(sec => {
+                        if (sec !== AppState.currentSection) {
+                            if (!AppState.sectionsData[sec]) AppState.sectionsData[sec] = {};
+                            AppState.sectionsData[sec]['NÚMERO REVISIÓN'] = e.target.value;
+                        }
+                    });
+                }
+
+                // Sync IDENTIFICACIÓN SEGÚN CLIENTE ↔ REF. TITULAR
+                if (e.target.dataset.field === 'IDENTIFICACIÓN SEGÚN CLIENTE') {
+                    if (!AppState.sectionsData['datos_datos_instalacion']) AppState.sectionsData['datos_datos_instalacion'] = {};
+                    AppState.sectionsData['datos_datos_instalacion']['REF. TITULAR'] = e.target.value;
+                }
+                if (e.target.dataset.field === 'REF. TITULAR') {
+                    if (!AppState.sectionsData['datos_datos_informe']) AppState.sectionsData['datos_datos_informe'] = {};
+                    AppState.sectionsData['datos_datos_informe']['IDENTIFICACIÓN SEGÚN CLIENTE'] = e.target.value;
+                }
+
                 // Auto-relleno Datos de Delegación
                 if (e.target.dataset.field === 'DELEGACIÓN') {
                     const DELEGACIONES = {
@@ -1816,20 +1984,22 @@ const App = {
         if (!this._clFilters) this._clFilters = {};
         const activeFilter = this._clFilters[sectionId] || 'todos';
 
-        let okCount = 0, badCount = 0, naCount = 0, pendingCount = 0;
+        let okCount = 0, negCount = 0, recomCount = 0, naCount = 0, pendingCount = 0;
         section.items.forEach(item => {
             const est = (data[item.id] || {}).estado || '';
             if (est === '✔️ POSITIVO') okCount++;
-            else if (est === '❌ NEGATIVO' || est === '⚠️ RECOMENDACIÓN') badCount++;
+            else if (est === '❌ NEGATIVO') negCount++;
+            else if (est === '⚠️ RECOMENDACIÓN') recomCount++;
             else if (est === '➖ NO PROCEDE') naCount++;
             else pendingCount++;
         });
         const total = section.items.length;
-        const progressPct = total > 0 ? Math.round(((okCount + naCount) / total) * 100) : 0;
+        const completedCount = okCount + negCount + recomCount + naCount;
+        const progressPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
         const filterDefs = [
             {key: 'todos', label: `Todos (${total})`},
             {key: 'ok',    label: `OK (${okCount})`},
-            {key: 'nook',  label: `No OK (${badCount})`},
+            {key: 'nook',  label: `No OK (${negCount + recomCount})`},
             {key: 'na',    label: `N/A (${naCount})`},
             {key: 'pend',  label: `Pendientes (${pendingCount})`},
         ];
@@ -1838,9 +2008,9 @@ const App = {
             <div class="section-card">
                 <div class="section-title">${section.icon} ${section.name}</div>
                 <div class="checklist-section-header">
-                    <div class="cl-progress-label">${okCount + naCount} / ${total} completados</div>
+                    <div class="cl-progress-label">${completedCount} / ${total} completados</div>
                     <div class="cl-progress-bar"><div class="cl-progress-bar-fill" style="width:${progressPct}%"></div></div>
-                    ${badCount > 0 ? `<div style="font-family:var(--display);font-size:11px;font-weight:700;color:var(--bad);white-space:nowrap">${badCount} no conformidades</div>` : ''}
+                    ${negCount > 0 ? `<div style="font-family:var(--display);font-size:11px;font-weight:700;color:var(--bad);white-space:nowrap">${negCount} no conformidades</div>` : ''}
                 </div>
                 <div class="cl-filters">
                     ${filterDefs.map(f => `<button class="cl-filter-btn${activeFilter === f.key ? ' active' : ''}" data-filter="${f.key}">${f.label}</button>`).join('')}
@@ -1906,14 +2076,25 @@ const App = {
                                 `}
 
                                 ${showExtraFields ? `
-                                    <div style="margin-top:0.75rem">
-                                        <label class="form-label">Observaciones</label>
-                                        <textarea class="form-input" data-item="${item.id}" data-field-type="observaciones" rows="3">${itemData.observaciones || ''}</textarea>
+                                    <div style="margin-top:0.75rem;display:grid;grid-template-columns:${AppState.isLegalMode ? '1fr 1fr' : '1fr'};gap:0.75rem">
+                                        <div>
+                                            <label class="form-label">Observaciones - Técnico</label>
+                                            <textarea class="form-input" data-item="${item.id}" data-field-type="observaciones" rows="3">${itemData.observaciones || ''}</textarea>
+                                        </div>
+                                        ${AppState.isLegalMode ? `<div>
+                                            <label class="form-label">Observaciones - Legal</label>
+                                            <textarea class="form-input" data-item="${item.id}" data-field-type="observacionesLegal" rows="3">${itemData.observacionesLegal || ''}</textarea>
+                                        </div>` : ''}
                                     </div>
                                 ` : ''}
 
                                 ${shouldShowImages ? (() => {
-                                    const imgLabel = 'Imágenes' + (forceShowImages && !showExtraFields ? ' (Obligatorio)' : '');
+                                    let imgLabel = 'Imágenes';
+                                    if (forceShowImages && !showExtraFields) {
+                                        imgLabel = (!AppState.isLegalMode && typeof Ayudante !== 'undefined')
+                                            ? Ayudante.getImgHint(item.id, item.desc)
+                                            : 'Imágenes (Obligatorio)';
+                                    }
                                     const imgContent = AppState.isLegalMode
                                         ? this._legalImgSectionHtml(
                                             '',
@@ -1923,7 +2104,7 @@ const App = {
                                             "App.removeChecklistImage('" + sectionId + "','" + item.id + "',{i})",
                                             "App.toggleImagePdf('" + sectionId + "','" + item.id + "',{i})"
                                           )
-                                        : '<div class="photo-upload" onclick="App.uploadChecklistImage(\'' + sectionId + '\',\'' + item.id + '\')" style="margin-bottom:1rem">'
+                                        : '<div class="photo-upload" onclick="App._showPhotoSourceDialog(()=>{App.uploadChecklistImage(\'' + sectionId + '\',\'' + item.id + '\')},()=>{App.uploadChecklistImages(\'' + sectionId + '\',\'' + item.id + '\')})" style="margin-bottom:1rem">'
                                             + `<div style="margin-bottom:0.5rem;color:#6b7280">${ic('camera')}</div>`
                                             + '<div style="font-size:0.875rem;color:#6b7280;font-weight:600">Añadir Imagen</div>'
                                             + '</div>'
@@ -1968,6 +2149,9 @@ const App = {
                     e.target.className = 'form-input ' + (e.target.value === '✔️ POSITIVO' ? 'result-valid'
                                        : e.target.value === '❌ NEGATIVO' ? 'result-invalid'
                                        : e.target.value === '⚠️ RECOMENDACIÓN' ? 'result-warning' : '');
+                    if ((e.target.value === '❌ NEGATIVO' || e.target.value === '⚠️ RECOMENDACIÓN') && typeof Ayudante !== 'undefined') {
+                        Ayudante.onChecklistNegativo(sectionId, itemId);
+                    }
                     this.renderChecklistSection(section);
                 } else if (fieldType === 'gravedad') {
                     e.target.className = 'form-input ' + (e.target.value === 'Leve' ? 'checklist-gravedad-leve'
@@ -2201,85 +2385,38 @@ La próxima inspección periódica obligatoria de la instalación frigorífica, 
 
         workspace.innerHTML = `
         <div class="section-card" style="padding:0">
-            <!-- Toolbar -->
             <div style="padding:1rem 1.5rem;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#f9fafb">
                 <span style="font-weight:600;color:#374151">${ic('home')} Portada</span>
                 <button class="add-vs-btn" onclick="App.regenerarPortada()" style="margin:0">${ic('refresh')} Regenerar datos automáticos</button>
             </div>
-
-            <!-- Preview de portada -->
-            <div style="padding:2rem;background:#f3f4f6;display:flex;justify-content:center">
-                <div id="portada-preview" style="width:595px;min-height:842px;background:white;box-shadow:0 4px 24px rgba(0,0,0,0.13);position:relative;display:flex;flex-direction:column;font-family:'Segoe UI',Arial,sans-serif;overflow:hidden">
-
-                    <!-- Barra superior azul oscuro -->
-                    <div style="background:#1a2744;height:12px;width:100%"></div>
-
-                    <!-- Header: logo + título empresa -->
-                    <div style="display:flex;align-items:center;justify-content:space-between;padding:1.5rem 2rem 1rem">
-                        <img src="imagenes/clauger-logo-white.png" style="height:48px;object-fit:contain" alt="CLAUGER">
-                        <div style="text-align:right;color:#6b7280;font-size:0.7rem;line-height:1.5">
-                            <div style="font-weight:700;color:#1a2744;font-size:0.8rem">CLAUGER IBÉRICA S.L.U.</div>
-                        </div>
-                    </div>
-
-                    <!-- Banda azul central con título principal -->
-                    <div style="background:#1a2744;color:white;padding:3rem 2.5rem;flex:1;display:flex;flex-direction:column;justify-content:center;margin:0 0 0 0;position:relative">
-                        <div style="position:absolute;top:0;right:0;width:180px;height:100%;background:rgba(255,255,255,0.04)"></div>
-                        <div style="font-size:0.7rem;letter-spacing:0.2em;color:#93c5fd;text-transform:uppercase;margin-bottom:0.5rem">Informe Técnico</div>
-                        <div style="font-size:1.6rem;font-weight:800;line-height:1.2;margin-bottom:0.4rem">
-                            <input id="port-titulo" value="${v('titulo')}" style="background:transparent;border:none;border-bottom:2px solid rgba(255,255,255,0.3);color:white;font-size:inherit;font-weight:inherit;width:100%;outline:none;padding:0.2rem 0" placeholder="Título principal">
-                        </div>
-                        <div style="font-size:1rem;color:#93c5fd;font-weight:500;margin-bottom:2.5rem">
-                            <input id="port-subtitulo" value="${v('subtitulo')}" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.2);color:#93c5fd;font-size:inherit;font-weight:inherit;width:100%;outline:none;padding:0.15rem 0" placeholder="Subtítulo">
-                        </div>
-
-                        <!-- Caja de datos cliente (abajo derecha) -->
-                        <div style="align-self:flex-end;background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.18);border-radius:6px;padding:1rem 1.25rem;min-width:260px;max-width:340px">
-                            <div style="font-size:0.65rem;letter-spacing:0.12em;color:#93c5fd;text-transform:uppercase;margin-bottom:0.75rem;font-weight:700">Datos del cliente</div>
-
-                            <div style="font-size:0.7rem;color:rgba(255,255,255,0.6);margin-bottom:2px">Cliente</div>
-                            <input id="port-cliente" value="${v('cliente')}" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.2);color:white;font-weight:600;font-size:0.85rem;width:100%;outline:none;padding:0.15rem 0;margin-bottom:0.6rem" placeholder="Nombre de cliente">
-
-                            <div style="font-size:0.7rem;color:rgba(255,255,255,0.6);margin-bottom:2px">Dirección</div>
-                            <input id="port-direccion" value="${v('direccion')}" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.2);color:white;font-size:0.8rem;width:100%;outline:none;padding:0.15rem 0;margin-bottom:0.6rem" placeholder="Dirección">
-
-                            <div style="display:grid;grid-template-columns:80px 1fr;gap:0.5rem;margin-bottom:0.6rem">
-                                <div>
-                                    <div style="font-size:0.7rem;color:rgba(255,255,255,0.6);margin-bottom:2px">C.P.</div>
-                                    <input id="port-cp" value="${v('cp')}" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.2);color:white;font-size:0.8rem;width:100%;outline:none;padding:0.15rem 0" placeholder="00000">
-                                </div>
-                                <div>
-                                    <div style="font-size:0.7rem;color:rgba(255,255,255,0.6);margin-bottom:2px">Población</div>
-                                    <input id="port-localidad" value="${v('localidad')}" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.2);color:white;font-size:0.8rem;width:100%;outline:none;padding:0.15rem 0" placeholder="Localidad">
-                                </div>
-                            </div>
-
-                            <div style="font-size:0.7rem;color:rgba(255,255,255,0.6);margin-bottom:2px">Provincia</div>
-                            <input id="port-provincia" value="${v('provincia')}" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.2);color:white;font-size:0.8rem;width:100%;outline:none;padding:0.15rem 0;margin-bottom:0.75rem" placeholder="Provincia">
-
-                            <div style="display:grid;grid-template-columns:1fr 70px;gap:0.5rem">
-                                <div>
-                                    <div style="font-size:0.7rem;color:rgba(255,255,255,0.6);margin-bottom:2px">Nº Referencia</div>
-                                    <input id="port-referencia" value="${v('referencia')}" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.2);color:white;font-size:0.8rem;width:100%;outline:none;padding:0.15rem 0" placeholder="REF-XXXX">
-                                </div>
-                                <div>
-                                    <div style="font-size:0.7rem;color:rgba(255,255,255,0.6);margin-bottom:2px">Año</div>
-                                    <input id="port-anio" value="${v('anio')}" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.2);color:white;font-size:0.8rem;width:100%;outline:none;padding:0.15rem 0" placeholder="${new Date().getFullYear()}">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Pie de página -->
-                    <div style="background:#1a2744;height:8px;width:100%"></div>
+            <div style="padding:2rem;background:#e8e8e8;display:flex;gap:2rem;align-items:flex-start">
+                <div style="width:260px;flex-shrink:0;background:#fff;border-radius:8px;padding:1.2rem;box-shadow:0 1px 4px rgba(0,0,0,.1)">
+                    <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;margin-bottom:1rem">Datos de portada</div>
+                    ${['titulo','subtitulo','cliente','direccion','cp','localidad','provincia','referencia','anio'].map(key => `
+                    <div style="margin-bottom:0.7rem">
+                        <label style="display:block;font-size:0.7rem;font-weight:600;color:#4d5670;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">${key.charAt(0).toUpperCase() + key.slice(1)}</label>
+                        <input id="port-${key}" class="form-input" value="${v(key)}" style="font-size:0.82rem;padding:0.35rem 0.55rem" placeholder="${key}">
+                    </div>`).join('')}
+                </div>
+                <div style="overflow:hidden;width:516px;height:730px;flex-shrink:0">
+                    <iframe id="portada-preview-frame"
+                        style="width:794px;height:1123px;border:none;transform:scale(0.65);transform-origin:top left;pointer-events:none">
+                    </iframe>
                 </div>
             </div>
         </div>`;
 
-        // Guardar cambios en AppState.portadaData
+        const frame = document.getElementById('portada-preview-frame');
+        if (frame) frame.srcdoc = this._buildPreviewSrcdoc(this._buildPortadaHtml(v));
+
         ['titulo','subtitulo','cliente','direccion','cp','localidad','provincia','referencia','anio'].forEach(key => {
             const el = document.getElementById('port-' + key);
-            if (el) el.addEventListener('input', (e) => { AppState.portadaData[key] = e.target.value; });
+            if (el) el.addEventListener('input', (e) => {
+                AppState.portadaData[key] = e.target.value;
+                const pvFn = (k) => AppState.portadaData[k] || defaults[k] || '';
+                const fr = document.getElementById('portada-preview-frame');
+                if (fr) fr.srcdoc = this._buildPreviewSrcdoc(this._buildPortadaHtml(pvFn));
+            });
         });
     },
 
@@ -2289,33 +2426,116 @@ La próxima inspección periódica obligatoria de la instalación frigorífica, 
         this.showToast('Datos regenerados desde el formulario', 'success');
     },
 
+    _buildPortadaHtml(pvFn) {
+        return `<div style="min-height:1123px;width:794px;background:#fff;position:relative;overflow:hidden;display:flex;flex-direction:column;font-family:'Inter',Arial,sans-serif">
+  <div style="display:flex;height:5px"><i style="width:120px;background:#d32525;display:block"></i><i style="flex:1;background:#2f5aa6;display:block"></i></div>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:46px 60px 0">
+    <img src="imagenes/clauger-color.png" style="height:30px;object-fit:contain;display:block" alt="CLAUGER">
+    <div style="text-align:right;font-size:10px;line-height:1.7;letter-spacing:.05em;text-transform:uppercase;color:#8b93a7">
+      ${pvFn('referencia')?`<b style="display:block;color:#515b73;font-weight:700;font-size:11px">${pvFn('referencia')}</b>`:''}Informe técnico${pvFn('anio')?' &middot; '+pvFn('anio'):''}
+    </div>
+  </div>
+  <img src="imagenes/clauger-macaron-faint.png" style="position:absolute;top:120px;right:-70px;width:430px;opacity:.5" alt="">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:0 60px;position:relative;z-index:1">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.26em;text-transform:uppercase;color:#2f5aa6">Informe técnico reglamentario</div>
+    <div style="font-size:46px;font-weight:800;line-height:1.06;letter-spacing:-.02em;color:#1a2744;margin-top:22px">${pvFn('titulo')}</div>
+    <div style="font-size:16px;color:#515b73;margin-top:16px">${pvFn('subtitulo')}</div>
+    <div style="display:flex;align-items:center;gap:14px;margin:32px 0 40px">
+      <i style="width:60px;height:3px;background:#2f5aa6;display:block"></i>
+      <span style="font-weight:700;color:#2f5aa6;font-size:20px;line-height:1">&#8600;</span>
+    </div>
+    <div style="border:1px solid #d9dee9;border-radius:10px;padding:26px 30px;max-width:430px">
+      <div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#2f5aa6;font-weight:700;margin-bottom:14px">Datos del cliente</div>
+      ${pvFn('cliente')?`<div style="font-size:18px;font-weight:700;color:#1a2744">${pvFn('cliente')}</div>`:''}
+      ${pvFn('direccion')?`<div style="font-size:13px;color:#515b73;line-height:1.6;margin-top:6px">${pvFn('direccion')}</div>`:''}
+      ${(pvFn('cp')||pvFn('localidad'))?`<div style="font-size:13px;color:#515b73;line-height:1.6">${[pvFn('cp'),pvFn('localidad')].filter(Boolean).join(' &mdash; ')}</div>`:''}
+      ${pvFn('provincia')?`<div style="font-size:13px;color:#515b73;line-height:1.6">${pvFn('provincia')}</div>`:''}
+      <div style="display:flex;gap:30px;margin-top:20px;padding-top:18px;border-top:1px solid #e7eaf1">
+        ${pvFn('referencia')?`<div><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#8b93a7;font-weight:700">Referencia</div><div style="font-size:14px;font-weight:700;color:#1a2744;margin-top:4px">${pvFn('referencia')}</div></div>`:''}
+        ${pvFn('anio')?`<div><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#8b93a7;font-weight:700">Año</div><div style="font-size:14px;font-weight:700;color:#1a2744;margin-top:4px">${pvFn('anio')}</div></div>`:''}
+      </div>
+    </div>
+  </div>
+  <div style="padding:18px 60px 40px">
+    <div style="border-top:1px solid #e7eaf1;padding-top:16px;display:flex;justify-content:space-between;font-size:10px;color:#8b93a7;letter-spacing:.04em">
+      <span><b style="color:#515b73">CLAUGER Refrigeración Iberia S.A.</b> &middot; Empresa Frigorista Autorizada</span>
+      <span>Documento confidencial</span>
+    </div>
+  </div>
+</div>`;
+    },
+
+    _buildContraportadaHtml(pvFn, contraTexto) {
+        const escaped = (contraTexto||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return `<div style="min-height:1123px;width:794px;background:#fff;display:flex;flex-direction:column;font-family:'Inter',Arial,sans-serif">
+  <div style="display:flex;height:5px"><i style="width:120px;background:#d32525;display:block"></i><i style="flex:1;background:#2f5aa6;display:block"></i></div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 60px;text-align:center">
+    <img src="imagenes/clauger-macaron-color.png" style="width:78px;object-fit:contain;display:block;margin-bottom:30px" alt="CLAUGER">
+    <div style="font-size:24px;font-weight:700;color:#1a2744;line-height:1.3;max-width:440px;letter-spacing:-.02em;white-space:pre-line">${escaped}</div>
+    <div style="width:60px;height:3px;background:#2f5aa6;margin:34px auto"></div>
+    <div style="display:flex;gap:64px;justify-content:center;text-align:left">
+      <div>
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#2f5aa6;font-weight:700;margin-bottom:10px">Contacto</div>
+        <div style="font-size:13px;color:#515b73;line-height:1.7"><b style="color:#1a2744">CLAUGER Refrigeración Iberia S.A.</b><br>Empresa Frigorista Autorizada<br>www.clauger.com</div>
+      </div>
+      ${pvFn('referencia')?`<div>
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#2f5aa6;font-weight:700;margin-bottom:10px">Documento</div>
+        <div style="font-size:13px;color:#515b73;line-height:1.7">Ref. <b style="color:#1a2744">${pvFn('referencia')}</b>${pvFn('anio')?`<br>Emitido en ${pvFn('anio')}`:''}<br>Confidencial — uso del cliente</div>
+      </div>`:''}
+    </div>
+  </div>
+  <div style="padding:22px 60px 40px">
+    <div style="border-top:1px solid #e7eaf1;padding-top:16px;display:flex;justify-content:space-between;font-size:10px;color:#8b93a7;letter-spacing:.04em">
+      <span><b style="color:#515b73">CLAUGER Refrigeración Iberia S.A.</b></span>
+      <span>www.clauger.com &middot; Documento confidencial</span>
+    </div>
+  </div>
+</div>`;
+    },
+
+    _buildPreviewSrcdoc(innerHtml) {
+        const base = window.location.href;
+        return `<!DOCTYPE html><html><head><meta charset="UTF-8"><base href="${base}"><style>*{margin:0;padding:0;box-sizing:border-box}body{margin:0;padding:0;background:#fff}</style></head><body>${innerHtml}</body></html>`;
+    },
+
     renderIndice() {
         const workspace = document.getElementById('workspace');
 
         const defaultItems = [
-            { label: 'ACTA',                                           num: '1' },
-            { label: 'CERTIFICADO EQUIPOS A PRESIÓN',                  num: '2' },
-            { label: 'CERTIFICADO VÁLVULAS DE SEGURIDAD',              num: '3' },
-            { label: 'CERTIFICADO DETECTOR',                           num: '4' },
-            { label: 'TERMOGRAFÍA',                                    num: '5' },
-            { label: 'PLANIFICACIÓN',                                  num: '6' }
+            { key: 'acta',         label: 'ACTA'                              },
+            { key: 'equipos',      label: 'CERTIFICADO EQUIPOS A PRESIÓN'      },
+            { key: 'valvulas',     label: 'CERTIFICADO VÁLVULAS DE SEGURIDAD'  },
+            { key: 'detectores',   label: 'CERTIFICADO DETECTOR'               },
+            { key: 'termografia',  label: 'TERMOGRAFÍA'                        },
+            { key: 'planificacion',label: 'PLANIFICACIÓN'                      }
         ];
 
+        const _VALID_KEYS = ['acta','equipos','valvulas','detectores','termografia','planificacion'];
+        const _LABEL_KEY_MAP = { 'ACTA':'acta','CERTIFICADO EQUIPOS A PRESIÓN':'equipos','CERTIFICADO VÁLVULAS DE SEGURIDAD':'valvulas','CERTIFICADO DETECTOR':'detectores','TERMOGRAFÍA':'termografia','PLANIFICACIÓN':'planificacion' };
         if (!AppState.indiceData.items || AppState.indiceData.items.length === 0) {
-            AppState.indiceData.items = defaultItems.map(i => ({...i}));
+            AppState.indiceData.items = defaultItems.map((i, n) => ({...i, num: String(n + 1)}));
+        } else {
+            AppState.indiceData.items.forEach((item, idx) => {
+                if (!item.key || !_VALID_KEYS.includes(item.key)) {
+                    item.key = _LABEL_KEY_MAP[(item.label||'').toUpperCase().trim()] || 'custom_' + idx;
+                }
+                item.num = String(idx + 1);
+            });
         }
         const items = AppState.indiceData.items;
 
         const filas = items.map((item, idx) => `
             <div style="display:flex;align-items:center;gap:0.75rem;padding:0.7rem 1rem;border-bottom:1px solid #e5e7eb;background:${idx%2===0?'white':'#f9fafb'}">
+                <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
+                    <button onclick="App.moveIndiceItem(${idx},-1)" ${idx===0?'disabled':''} style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:3px;width:22px;height:18px;cursor:pointer;font-size:10px;line-height:1;${idx===0?'opacity:0.3;':''}display:flex;align-items:center;justify-content:center">▲</button>
+                    <button onclick="App.moveIndiceItem(${idx},1)" ${idx===items.length-1?'disabled':''} style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:3px;width:22px;height:18px;cursor:pointer;font-size:10px;line-height:1;${idx===items.length-1?'opacity:0.3;':''}display:flex;align-items:center;justify-content:center">▼</button>
+                </div>
                 <input value="${item.label}" data-indice="${idx}" data-indice-field="label"
                     style="flex:1;border:none;background:transparent;font-size:0.92rem;font-weight:500;color:#1f2937;outline:none;padding:0.15rem 0.3rem;border-radius:3px"
                     onfocus="this.style.background='#eff6ff'" onblur="this.style.background='transparent'">
                 <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0">
-                    <span style="color:#9ca3af;font-size:0.8rem">Pág.</span>
-                    <input value="${item.num}" data-indice="${idx}" data-indice-field="num"
-                        style="width:44px;text-align:center;border:1px solid #e5e7eb;border-radius:4px;font-size:0.85rem;padding:0.25rem;color:#1f2937;background:white;outline:none"
-                        onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e5e7eb'">
+                    <span style="color:#9ca3af;font-size:0.8rem">Sección</span>
+                    <span style="width:28px;text-align:center;font-size:0.9rem;font-weight:700;color:#374151">${item.num}</span>
                     <button onclick="App.removeIndiceItem(${idx})" style="background:#fee2e2;color:#ef4444;border:none;border-radius:4px;width:24px;height:24px;cursor:pointer;font-size:0.9rem;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
                 </div>
             </div>`).join('');
@@ -2324,7 +2544,20 @@ La próxima inspección periódica obligatoria de la instalación frigorífica, 
         <div class="section-card" style="padding:0">
             <div style="padding:1rem 1.5rem;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#f9fafb">
                 <span style="font-weight:600;color:#374151">${ic('list')} Índice de documentos</span>
-                <button class="add-vs-btn" onclick="App.addIndiceItem()" style="margin:0">${ic('plus')} Añadir entrada</button>
+                <div style="display:flex;gap:0.5rem;align-items:center">
+                    <select id="new-indice-key" style="font-size:0.82rem;border:1px solid #d1d5db;border-radius:5px;padding:4px 8px;background:white;color:#374151;max-width:260px">
+                        <option value="acta">ACTA</option>
+                        <option value="equipos">CERTIFICADO EQUIPOS A PRESIÓN</option>
+                        <option value="valvulas">CERTIFICADO VÁLVULAS DE SEGURIDAD</option>
+                        <option value="detectores">CERTIFICADO DETECTOR</option>
+                        <option value="termografia">TERMOGRAFÍA</option>
+                        <option value="planificacion">PLANIFICACIÓN</option>
+                    </select>
+                    <button class="add-vs-btn" onclick="App.addIndiceItem()" style="margin:0">${ic('plus')} Añadir</button>
+                </div>
+            </div>
+            <div style="padding:1rem 1.5rem;background:#fffbeb;border-bottom:1px solid #fde68a;font-size:0.8rem;color:#92400e">
+                ${ic('zap')} Las secciones eliminadas no aparecerán en el PDF. El orden aquí determina el orden en el informe.
             </div>
 
             <!-- Preview índice -->
@@ -2359,7 +2592,19 @@ La próxima inspección periódica obligatoria de la instalación frigorífica, 
     },
 
     addIndiceItem() {
-        AppState.indiceData.items.push({ label: 'Nuevo documento', num: '' });
+        const PREDEFINED = {
+            acta: 'ACTA',
+            equipos: 'CERTIFICADO EQUIPOS A PRESIÓN',
+            valvulas: 'CERTIFICADO VÁLVULAS DE SEGURIDAD',
+            detectores: 'CERTIFICADO DETECTOR',
+            termografia: 'TERMOGRAFÍA',
+            planificacion: 'PLANIFICACIÓN'
+        };
+        const sel = document.getElementById('new-indice-key');
+        const key = sel ? sel.value : 'acta';
+        const label = PREDEFINED[key] || key;
+        const n = AppState.indiceData.items.length + 1;
+        AppState.indiceData.items.push({ key, label, num: String(n) });
         this.renderIndice();
     },
 
@@ -2368,10 +2613,21 @@ La próxima inspección periódica obligatoria de la instalación frigorífica, 
         this.renderIndice();
     },
 
+    moveIndiceItem(idx, direction) {
+        const items = AppState.indiceData.items;
+        const newIdx = idx + direction;
+        if (newIdx < 0 || newIdx >= items.length) return;
+        [items[idx], items[newIdx]] = [items[newIdx], items[idx]];
+        this.renderIndice();
+    },
+
     renderContraportada() {
         const workspace = document.getElementById('workspace');
+        const defaults  = this._getPortadaDefaults();
+        const d         = AppState.portadaData;
+        const v = (key) => d[key] || defaults[key] || '';
         const defaultTexto = AppState.contraportadaData.texto ||
-`CLAUGER IBÉRICA S.L.U.
+`CLAUGER REFRIGERACIÓN IBERIA S.A.
 Empresa Frigorista Autorizada
 
 Para cualquier consulta o información adicional relacionada con este informe, no dude en ponerse en contacto con nuestro departamento técnico.
@@ -2384,36 +2640,29 @@ www.clauger.com`;
                 <span style="font-weight:600;color:#374151">${ic('file')} Contraportada</span>
                 <span style="font-size:0.8rem;color:#9ca3af">Edita el texto libremente</span>
             </div>
-
-            <div style="padding:2rem;background:#f3f4f6;display:flex;justify-content:center">
-                <div style="width:595px;min-height:842px;background:white;box-shadow:0 4px 24px rgba(0,0,0,0.13);display:flex;flex-direction:column;font-family:'Segoe UI',Arial,sans-serif;overflow:hidden">
-
-                    <div style="background:#1a2744;height:12px;width:100%"></div>
-
-                    <!-- Contenido central -->
-                    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 2.5rem;text-align:center">
-
-                        <img src="imagenes/clauger-logo-white.png" style="height:64px;object-fit:contain;margin-bottom:2rem;opacity:0.9" alt="CLAUGER">
-
-                        <div style="width:48px;height:3px;background:#1a2744;border-radius:2px;margin-bottom:2rem"></div>
-
-                        <textarea id="contra-texto" class="form-input"
-                            style="width:100%;min-height:200px;text-align:center;font-size:0.9rem;line-height:1.8;resize:vertical;border:1px dashed #d1d5db;background:#fafafa;color:#374151"
-                            placeholder="Texto de contraportada...">${defaultTexto}</textarea>
-
-                        <div style="width:48px;height:3px;background:#e5e7eb;border-radius:2px;margin-top:2rem"></div>
-                    </div>
-
-                    <div style="background:#1a2744;padding:1rem 2rem;display:flex;align-items:center;justify-content:center">
-                        <span style="color:rgba(255,255,255,0.5);font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase">CLAUGER IBÉRICA S.L.U. — Empresa Frigorista Autorizada</span>
-                    </div>
-                    <div style="background:#1a2744;height:8px;width:100%;border-top:1px solid rgba(255,255,255,0.1)"></div>
+            <div style="padding:2rem;background:#e8e8e8;display:flex;gap:2rem;align-items:flex-start">
+                <div style="width:260px;flex-shrink:0;background:#fff;border-radius:8px;padding:1.2rem;box-shadow:0 1px 4px rgba(0,0,0,.1)">
+                    <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;margin-bottom:0.8rem">Texto de contraportada</div>
+                    <textarea id="contra-texto" class="form-input"
+                        style="width:100%;min-height:280px;font-size:0.85rem;line-height:1.7;resize:vertical"
+                        placeholder="Texto de contraportada...">${defaultTexto}</textarea>
+                </div>
+                <div style="overflow:hidden;width:516px;height:730px;flex-shrink:0">
+                    <iframe id="contra-preview-frame"
+                        style="width:794px;height:1123px;border:none;transform:scale(0.65);transform-origin:top left;pointer-events:none">
+                    </iframe>
                 </div>
             </div>
         </div>`;
 
+        const frame = document.getElementById('contra-preview-frame');
+        if (frame) frame.srcdoc = this._buildPreviewSrcdoc(this._buildContraportadaHtml(v, defaultTexto));
+
         document.getElementById('contra-texto').addEventListener('input', (e) => {
             AppState.contraportadaData.texto = e.target.value;
+            const pvFn = (k) => AppState.portadaData[k] || defaults[k] || '';
+            const fr = document.getElementById('contra-preview-frame');
+            if (fr) fr.srcdoc = this._buildPreviewSrcdoc(this._buildContraportadaHtml(pvFn, e.target.value));
         });
     },
 
@@ -2557,7 +2806,7 @@ www.clauger.com`;
             : archivos.map((pdf, idx) => this._pdfFilaHtml(pdf, idx, 'App.viewActaInicial', 'App.removeActaInicial')).join('');
         workspace.innerHTML = `
             <div class="section-card">
-                <div class="section-title">${ic('clipboard')} Acta Inicial</div>
+                <div class="section-title">${ic('clipboard')} Acta</div>
                 ${this._pdfDropZoneHtml('actaInicial', 'App.uploadActaInicial()')}
                 ${lista}
             </div>`;
@@ -3411,8 +3660,16 @@ www.clauger.com`;
 
                 <!-- Observaciones -->
                 <div class="form-group">
-                    <label class="form-label">Observaciones</label>
-                    <textarea class="form-input" rows="4" oninput="App.updateTermografiaField(${idx},'observaciones',this.value)" placeholder="Observaciones adicionales...">${p.observaciones}</textarea>
+                    <div style="display:grid;grid-template-columns:${AppState.isLegalMode ? '1fr 1fr' : '1fr'};gap:0.75rem">
+                        <div>
+                            <label class="form-label">Observaciones - Técnico</label>
+                            <textarea class="form-input" rows="4" oninput="App.updateTermografiaField(${idx},'observaciones',this.value)" placeholder="Observaciones adicionales...">${p.observaciones}</textarea>
+                        </div>
+                        ${AppState.isLegalMode ? `<div>
+                            <label class="form-label">Observaciones - Legal</label>
+                            <textarea class="form-input" rows="4" oninput="App.updateTermografiaField(${idx},'observacionesLegal',this.value)" placeholder="Observaciones legales...">${p.observacionesLegal||''}</textarea>
+                        </div>` : ''}
+                    </div>
                 </div>
 
                 ${resultBlock}
@@ -3431,12 +3688,13 @@ www.clauger.com`;
         const equipKey = 'Unidad Compresora';
         if (!AppState.equipmentData[equipKey]) AppState.equipmentData[equipKey] = [];
         
-        AppState.equipmentData[equipKey].push({fabricante: '', modelo: '', numSerie: '', subEquipments: {}});
+        AppState.equipmentData[equipKey].push({identificador: '', fabricante: '', modelo: '', numSerie: '', subEquipments: {}});
         const newIndex = AppState.equipmentData[equipKey].length - 1;
         AppState.expandedEquipment[`${equipKey}_${newIndex}`] = true;
         
         this.renderCompositeUnitsList();
         this.showToast('Unidad Compresora añadida', 'success');
+        if (typeof Tutorial !== 'undefined') Tutorial.onAddCompositeUnit();
     },
 
     renderCompositeUnitsList() {
@@ -3459,7 +3717,7 @@ www.clauger.com`;
                 <div class="equipment-item">
                     <div class="equipment-header" onclick="App.toggleEquipment('${equipKey}',${index})">
                         <div>
-                            <div class="equipment-header-title">${ic('wrench')} Unidad Compresora #${index + 1}</div>
+                            <div class="equipment-header-title">${typeData.icon} Unidad Compresora #${index + 1}${unit.identificador ? ` — ${unit.identificador}` : ''}</div>
                             <div class="equipment-summary">${[unit.fabricante, unit.modelo, unit.numSerie].filter(Boolean).join(' <span class="sep">·</span> ')}</div>
                         </div>
                         <div class="equipment-header-controls">
@@ -3472,10 +3730,11 @@ www.clauger.com`;
                             <div class="form-section-title">${ic('clipboard')} Datos Generales</div>
                             <div class="form-row">
                                 ${this.createFormFields([
+                                    {name: 'Identificador', path: 'identificador'},
                                     {name: 'Fabricante', path: 'fabricante'},
                                     {name: 'Modelo', path: 'modelo'},
                                     {name: 'Nº Serie', path: 'numSerie'}
-                                ], [unit.fabricante, unit.modelo, unit.numSerie])}
+                                ], [unit.identificador||'', unit.fabricante, unit.modelo, unit.numSerie])}
                             </div>
                         </div>
                         <div class="form-section">
@@ -3505,28 +3764,99 @@ www.clauger.com`;
         this.attachFormListeners();
     },
 
+    // ── Servicios (equipos) ───────────────────────────────────────────────────
+    addEquipoServicio() {
+        const equipKey = 'Servicios';
+        if (!AppState.equipmentData[equipKey]) AppState.equipmentData[equipKey] = [];
+        AppState.equipmentData[equipKey].push({
+            identificador: '', marca: '', modelo: '', numSerie: '', fechaFabricacion: '',
+            volumen: '', presionMax: '', presionMin: '', ubicacion: '',
+            normativa: '', categoria: '',
+            valvulas: {marca:'', modelo:'', sifon:'', items:[]},
+            observaciones: '', observacionesLegal: '',
+            resultadoForzado: false, certChecklist: [],
+            photos: {placa: null, general: null}, imagenes: []
+        });
+        const newIndex = AppState.equipmentData[equipKey].length - 1;
+        AppState.expandedEquipment[`${equipKey}_${newIndex}`] = true;
+        this.renderEquipoServiciosList();
+        this.showToast('Servicio añadido', 'success');
+    },
+
+    renderEquipoServiciosList() {
+        const listContainer = document.getElementById('equipmentList');
+        if (!listContainer) return;
+        const equipKey = 'Servicios';
+        const items = AppState.equipmentData[equipKey] || [];
+        if (items.length === 0) {
+            listContainer.innerHTML = '<p style="text-align:center;color:#9ca3af;padding:2rem">No hay servicios añadidos</p>';
+            return;
+        }
+        listContainer.innerHTML = items.map((svc, index) => {
+            const isExpanded = AppState.expandedEquipment[`${equipKey}_${index}`];
+            const context = {equipKey, index, isSubEquip: false};
+            return `
+                <div class="equipment-item">
+                    <div class="equipment-header" onclick="App.toggleEquipment('${equipKey}',${index})">
+                        <div>
+                            <div class="equipment-header-title">🔩 Servicio #${index + 1}${svc.identificador ? ` — ${svc.identificador}` : ''}</div>
+                            <div class="equipment-summary">${[svc.marca, svc.modelo, svc.numSerie].filter(Boolean).join(' <span class="sep">·</span> ')}</div>
+                        </div>
+                        <div class="equipment-header-controls">
+                            <button class="equipment-toggle">${isExpanded ? '▼' : '▶'}</button>
+                            <button class="equipment-remove-btn" onclick="event.stopPropagation();App.removeEquipment('${equipKey}',${index})">${ic('trash')} Eliminar</button>
+                        </div>
+                    </div>
+                    <div class="equipment-content ${isExpanded ? 'show' : ''}" id="equipment_${equipKey}_${index}">
+                        <div class="form-section">
+                            <div class="form-section-title">${ic('clipboard')} Descripción</div>
+                            <div class="ficha-top">
+                                <div class="ficha-photo">${this._fichaPhotoSlot(svc.photos?.placa||null, `App.uploadPhoto('${equipKey}',${index},'placa')`, `App.removePhoto('${equipKey}',${index},'placa')`, `App.uploadPhotoCam('${equipKey}',${index},'placa')`)}</div>
+                                <div class="ficha-id">${this._buildDsheetServicio(svc, equipKey, index)}</div>
+                            </div>
+                        </div>
+                        <div class="vtab-wrap">${this.renderValvulas(svc.valvulas, context, 'single')}</div>
+                        ${AppState.isLegalMode ? this._certBandHtml(svc.resultadoForzado, `App.setResultadoForzado('${equipKey}',${index},'favorable')`, `App.setResultadoForzado('${equipKey}',${index},'desfavorable')`, 'Servicios', 'Servicios', svc.certChecklist || [], `App.setCertChecklist('${equipKey}',${index},`) : ''}
+                        <div class="form-section">
+                            <div class="form-section-title">${ic('message')} Observaciones</div>
+                            ${AppState.isLegalMode ? `
+                                <div class="form-row" style="grid-template-columns:1fr 1fr">
+                                    ${this.createFormFields([{name: 'Observación - Técnico', type: 'textarea', path: 'observaciones', rows: 4}], [svc.observaciones])}
+                                    ${this.createFormFields([{name: 'Observación - Legal', type: 'textarea', path: 'observacionesLegal', rows: 4}], [svc.observacionesLegal||''])}
+                                </div>
+                            ` : this.createFormFields([{name: 'Observación - Técnico', type: 'textarea', path: 'observaciones', rows: 4}], [svc.observaciones])}
+                        </div>
+                        ${this.renderPhotoSection(svc.photos || {placa: null, general: null}, context)}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        this.attachFormListeners();
+    },
+
     renderSubEquipmentForm(subEquip, unitKey, unitIndex, subType, subIdx) {
         const isCompresor = subType === 'Bloque Compresor';
         const isIntercambiador = subType.includes('Enfriador Aceite');
         const template = isIntercambiador ? 'plantilla2' : 'plantilla1';
         const context = {equipKey: unitKey, index: unitIndex, isSubEquip: true, subType, subIdx};
         
+        const unit = AppState.equipmentData[unitKey]?.[unitIndex];
+        const identifier = unit?.identificador ? ` — ${unit.identificador}` : '';
         const isOtro = subType === 'Otro';
-        const subTitle = isOtro ? (subEquip.nombreEquipo || `Otro #${subIdx + 1}`) : `${subType} #${subIdx + 1}`;
+        const subTitle = isOtro ? (subEquip.nombreEquipo || `Otro #${subIdx + 1}`) : `${subType} #${subIdx + 1}${identifier}`;
 
         return `
             <div style="background:#f9fafb;border:2px solid #e5e7eb;border-radius:0.75rem;padding:1.5rem;margin-bottom:1rem">
                 <div style="display:flex;justify-content:space-between;margin-bottom:1rem">
-                    <h4 id="subequip-title-${unitKey}-${unitIndex}-${subIdx}" style="font-weight:600">${subTitle}</h4>
+                    <h4 id="subequip-title-${unitKey}-${unitIndex}-${subIdx}" data-subtype="${subType}" data-subidx="${subIdx}" style="font-weight:600">${subTitle}</h4>
                     <button class="remove-vs-btn" onclick="App.removeSubEquipment('${unitKey}',${unitIndex},'${subType}',${subIdx})">Eliminar</button>
                 </div>
                 ${isOtro ? `<div class="form-row">${this.createFormFields([{name: 'Nombre equipo', path: `${subType}.${subIdx}.nombreEquipo`}], [subEquip.nombreEquipo||''], 'data-subfield')}</div>` : ''}
                 ${template === 'plantilla2'
-                    ? this._buildAbTblSubEquip(subEquip, unitKey, unitIndex, subType, subIdx)
+                    ? `<div class="ficha-top"><div class="ficha-photo">${this._fichaPhotoSlot(subEquip.photos?.placa||null, `App.uploadPhotoSub('${unitKey}',${unitIndex},'${subType}',${subIdx},'placa')`, `App.removePhotoSub('${unitKey}',${unitIndex},'${subType}',${subIdx},'placa')`, `App.uploadPhotoSubCam('${unitKey}',${unitIndex},'${subType}',${subIdx},'placa')`)}</div><div class="ficha-id">${this._buildAbTblSubEquip(subEquip, unitKey, unitIndex, subType, subIdx)}</div></div>`
                     : `<div class="ficha-top">
-                        <div class="ficha-photo">${this._fichaPhotoSlot(subEquip.photos?.placa||null, `App.uploadPhotoSub('${unitKey}',${unitIndex},'${subType}',${subIdx},'placa')`, `App.removePhotoSub('${unitKey}',${unitIndex},'${subType}',${subIdx},'placa')`)}</div>
+                        <div class="ficha-photo">${this._fichaPhotoSlot(subEquip.photos?.placa||null, `App.uploadPhotoSub('${unitKey}',${unitIndex},'${subType}',${subIdx},'placa')`, `App.removePhotoSub('${unitKey}',${unitIndex},'${subType}',${subIdx},'placa')`, `App.uploadPhotoSubCam('${unitKey}',${unitIndex},'${subType}',${subIdx},'placa')`)}</div>
                         <div class="ficha-id">
-                            <div class="ficha-grp-h"><span style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)">Identificación</span><span class="rule"></span></div>
                             ${this._buildDsheetSubEquip(subEquip, unitKey, unitIndex, subType, subIdx)}
                         </div>
                       </div>`
@@ -3538,19 +3868,29 @@ www.clauger.com`;
                 ${isCompresor ? `
                     <div class="presostato-section">
                         <div style="font-weight:600;margin-bottom:1rem">${ic('zap')} Presostato AP</div>
-                        <div class="form-row">
+                        <div class="form-row" style="grid-template-columns:1fr 1fr">
                             ${this.createFormFields([
                                 {name: 'Tipo', type: 'select', path: `${subType}.${subIdx}.presostato`, options: ['', 'Simple', 'Doble', 'No']}
                             ], [subEquip.presostato], 'data-subfield')}
+                            <div class="form-col">
+                                <label class="form-label">Presión de regulación</label>
+                                <div style="display:flex;align-items:center;gap:6px">
+                                    <input type="text" class="form-input" data-subfield="${subType}.${subIdx}.presionRegulacion" value="${subEquip.presionRegulacion||''}">
+                                    <span style="font-size:11px;color:var(--ink-3);font-weight:600;white-space:nowrap">bar</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 ` : ''}
-                ${AppState.isLegalMode ? this._certBandHtml(!!subEquip.resultadoForzado, `App.toggleResultadoForzadoSub('${unitKey}',${unitIndex},'${subType}',${subIdx})`) : ''}
+                ${AppState.isLegalMode ? this._certBandHtml(subEquip.resultadoForzado, `App.setResultadoForzadoSub('${unitKey}',${unitIndex},'${subType}',${subIdx},'favorable')`, `App.setResultadoForzadoSub('${unitKey}',${unitIndex},'${subType}',${subIdx},'desfavorable')`, 'Unidad Compresora', subType, subEquip.certChecklist || [], `App.setCertChecklistSub('${unitKey}',${unitIndex},'${subType}',${subIdx},`) : ''}
                 <div class="form-section">
                     <div class="form-section-title">${ic('message')} Observaciones</div>
-                    ${this.createFormFields([
-                        {name: '', type: 'textarea', path: `${subType}.${subIdx}.observaciones`, rows: 4}
-                    ], [subEquip.observaciones], 'data-subfield')}
+                    ${AppState.isLegalMode ? `
+                        <div class="form-row" style="grid-template-columns:1fr 1fr">
+                            ${this.createFormFields([{name: 'Observación - Técnico', type: 'textarea', path: `${subType}.${subIdx}.observaciones`, rows: 4}], [subEquip.observaciones], 'data-subfield')}
+                            ${this.createFormFields([{name: 'Observación - Legal', type: 'textarea', path: `${subType}.${subIdx}.observacionesLegal`, rows: 4}], [subEquip.observacionesLegal||''], 'data-subfield')}
+                        </div>
+                    ` : this.createFormFields([{name: 'Observación - Técnico', type: 'textarea', path: `${subType}.${subIdx}.observaciones`, rows: 4}], [subEquip.observaciones], 'data-subfield')}
                 </div>
                 ${this.renderPhotoSection(subEquip.photos || {placa: null, general: null}, context)}
             </div>
@@ -3578,7 +3918,12 @@ www.clauger.com`;
         const eq = AppState.equipmentData[equipKey]?.[index];
         if (!eq) return;
         const k = lado === 'single' ? 'valvulas' : `valvulas${lado}`;
-        if (eq[k]?.items?.[vIdx] !== undefined) { eq[k].items[vIdx][field] = val; }
+        if (eq[k]?.items?.[vIdx] !== undefined) {
+            eq[k].items[vIdx][field] = val;
+            if (val === 'si' && ['inspVisual','verificacionDisparo','sustitucion'].includes(field)) {
+                ['inspVisual','verificacionDisparo','sustitucion'].forEach(f => { if (f !== field) eq[k].items[vIdx][f] = 'no'; });
+            }
+        }
         this.renderEquipmentList();
         this._doAutosave();
     },
@@ -3586,9 +3931,43 @@ www.clauger.com`;
         const sub = AppState.equipmentData[unitKey]?.[unitIdx]?.subEquipments?.[subType]?.[subIdx];
         if (!sub) return;
         const k = lado === 'single' ? 'valvulas' : `valvulas${lado}`;
-        if (sub[k]?.items?.[vIdx] !== undefined) { sub[k].items[vIdx][field] = val; }
+        if (sub[k]?.items?.[vIdx] !== undefined) {
+            sub[k].items[vIdx][field] = val;
+            if (val === 'si' && ['inspVisual','verificacionDisparo','sustitucion'].includes(field)) {
+                ['inspVisual','verificacionDisparo','sustitucion'].forEach(f => { if (f !== field) sub[k].items[vIdx][f] = 'no'; });
+            }
+        }
         this.renderCompositeUnitsList();
         this._doAutosave();
+    },
+    toggleAwpPicker(pickerId) {
+        const el = document.getElementById(pickerId);
+        if (el) el.classList.toggle('awp-picker--open');
+    },
+    onPsvMarcaChange(selectEl, ...wrapIds) {
+        const isAwp = selectEl.value === 'AWP';
+        wrapIds.forEach(wid => {
+            const wrap = document.getElementById(wid);
+            if (wrap) wrap.style.display = isAwp ? '' : 'none';
+        });
+    },
+    selectAwpConexion(pickerId, wrapId, val) {
+        const picker = document.getElementById(pickerId);
+        if (picker) {
+            picker.classList.remove('awp-picker--open');
+            picker.querySelectorAll('.awp-opt').forEach(opt => opt.classList.toggle('awp-opt--sel', opt.dataset.val === val));
+        }
+        const wrap = document.getElementById(wrapId);
+        if (wrap) {
+            let selImg = wrap.querySelector('.awp-sel-img');
+            if (!selImg) {
+                const iconsRow = wrap.querySelector('.awp-icons-row');
+                selImg = document.createElement('img');
+                selImg.className = 'awp-sel-img';
+                if (iconsRow) iconsRow.appendChild(selImg);
+            }
+            if (selImg) selImg.src = `imagenes/${val}.png`;
+        }
     },
     updatePsvCi(equipKey, index, lado, vIdx, field, val) {
         const eq = AppState.equipmentData[equipKey]?.[index];
@@ -3609,6 +3988,13 @@ www.clauger.com`;
         this.renderEquipmentList();
         this._doAutosave();
     },
+    setResultadoForzado(equipKey, index, val) {
+        const eq = AppState.equipmentData[equipKey]?.[index];
+        if (!eq) return;
+        eq.resultadoForzado = val;
+        this.renderEquipmentList();
+        this._doAutosave();
+    },
     toggleResultadoForzadoSub(unitKey, unitIdx, subType, subIdx) {
         const sub = AppState.equipmentData[unitKey]?.[unitIdx]?.subEquipments?.[subType]?.[subIdx];
         if (!sub) return;
@@ -3616,17 +4002,145 @@ www.clauger.com`;
         this.renderCompositeUnitsList();
         this._doAutosave();
     },
+    setResultadoForzadoSub(unitKey, unitIdx, subType, subIdx, val) {
+        const sub = AppState.equipmentData[unitKey]?.[unitIdx]?.subEquipments?.[subType]?.[subIdx];
+        if (!sub) return;
+        sub.resultadoForzado = val;
+        this.renderCompositeUnitsList();
+        this._doAutosave();
+    },
+    setCertChecklist(equipKey, index, itemIdx, val) {
+        const eq = AppState.equipmentData[equipKey]?.[index];
+        if (!eq) return;
+        if (!eq.certChecklist) eq.certChecklist = [];
+        eq.certChecklist[itemIdx] = val;
+        this._doAutosave();
+    },
+    setCertChecklistSub(unitKey, unitIdx, subType, subIdx, itemIdx, val) {
+        const sub = AppState.equipmentData[unitKey]?.[unitIdx]?.subEquipments?.[subType]?.[subIdx];
+        if (!sub) return;
+        if (!sub.certChecklist) sub.certChecklist = [];
+        sub.certChecklist[itemIdx] = val;
+        this._doAutosave();
+    },
+    _certChecklistItems(equipType, subType) {
+        const LIST_A = [
+            'Inspección visual del aparato observando que no presenta defectos, ni corrosiones en su superficie y soldaduras.',
+            'Inspección visual interna del aparato.',
+            'Inspección visual del aislamiento / Termografía.',
+            'Control de espesores por ultrasonidos según mediciones.'
+        ];
+        const LIST_B = [
+            'Inspección visual del aparato observando que no presenta defectos, ni corrosiones en su superficie y soldaduras.',
+            'Inspección visual interna del aparato.',
+            'Inspección visual del aislamiento / Termografía.',
+            'Verificación estado y existencia placa de características.',
+            'Control de espesores por ultrasonidos según mediciones.'
+        ];
+        const LIST_C = [
+            'Inspección visual del aparato observando que no presenta defectos, ni corrosiones en su superficie y soldaduras.',
+            'Inspección visual interna del aparato.',
+            'Verificación estado y existencia placa de características.'
+        ];
+        const LIST_D = [
+            'Inspección visual del aparato observando que no presenta defectos, ni corrosiones en su superficie y soldaduras.',
+            'Verificación estado y existencia placa de características.'
+        ];
+        const UC_SUBS = ['Sep. Aceite', 'Sep. Aceite Sec.', 'Enfriador Aceite', 'Enfriador Aceite Sec.', 'Filtro Aceite', 'Filtro Aspiración', 'Otro'];
+        if (subType === 'Bloque Compresor') return LIST_A;
+        if (UC_SUBS.includes(subType) || equipType === 'Recipiente' || subType === 'Int. Multitubular') return LIST_B;
+        if (subType === 'Int. Placas') return LIST_C;
+        if (equipType === 'Condensador') return LIST_D;
+        if (equipType === 'Servicios') return LIST_B;
+        return [];
+    },
     // ── Slot de foto para ficha-top ──────────────────────────────────────────
-    _fichaPhotoSlot(photoData, uploadFn, removeFn) {
+    _fichaPhotoSlot(photoData, uploadFn, removeFn, uploadCamFn) {
         if (photoData) {
             return `<div class="slot" style="position:relative" onclick="${uploadFn}">
                 <img src="${photoData}" alt="Placa">
                 <button onclick="event.stopPropagation();${removeFn}" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);border:0;color:#fff;border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:13px;line-height:1">×</button>
             </div>`;
         }
-        return `<div class="slot" onclick="${uploadFn}">
+        const clickFn = uploadCamFn
+            ? `App._showPhotoSourceDialog(()=>{${uploadCamFn}},()=>{${uploadFn}})`
+            : uploadFn;
+        return `<div class="slot" onclick="${clickFn}">
             <span class="slot-noimg">${ic('camera')}<b>Placa</b><span>Toca para añadir</span></span>
         </div>`;
+    },
+    // ── Undo / Redo ──────────────────────────────────────────────────────────
+    _historyStack: [],
+    _historyIdx: -1,
+    _saveHistory() {
+        try {
+            const snap = JSON.parse(JSON.stringify({
+                sectionsData: AppState.sectionsData,
+                equipmentData: AppState.equipmentData,
+                detectorsData: AppState.detectorsData,
+                serviciosData: AppState.serviciosData,
+                portadaData: AppState.portadaData || {},
+                indiceData: AppState.indiceData || {items:[]},
+                contraportadaData: AppState.contraportadaData || {texto:''},
+                planificacionData: AppState.planificacionData || {}
+            }));
+            this._historyStack = this._historyStack.slice(0, this._historyIdx + 1);
+            this._historyStack.push(snap);
+            if (this._historyStack.length > 30) this._historyStack.shift();
+            this._historyIdx = this._historyStack.length - 1;
+            this._updateUndoRedoBtns();
+        } catch(e) { /* ignore memory errors */ }
+    },
+    undo() {
+        if (this._historyIdx <= 0) return;
+        this._historyIdx--;
+        this._applyHistorySnap(this._historyStack[this._historyIdx]);
+    },
+    redo() {
+        if (this._historyIdx >= this._historyStack.length - 1) return;
+        this._historyIdx++;
+        this._applyHistorySnap(this._historyStack[this._historyIdx]);
+    },
+    _applyHistorySnap(snap) {
+        AppState.sectionsData       = snap.sectionsData || {};
+        AppState.equipmentData      = snap.equipmentData || {};
+        AppState.detectorsData      = snap.detectorsData || [];
+        AppState.serviciosData      = snap.serviciosData || [];
+        AppState.portadaData        = snap.portadaData || {};
+        AppState.indiceData         = snap.indiceData || {items:[]};
+        AppState.contraportadaData  = snap.contraportadaData || {texto:''};
+        AppState.planificacionData  = snap.planificacionData || {};
+        this.renderSidebar();
+        this.renderWorkspace();
+        this._updateUndoRedoBtns();
+    },
+    _updateUndoRedoBtns() {
+        const bUndo = document.getElementById('btnUndo');
+        const bRedo = document.getElementById('btnRedo');
+        if (bUndo) bUndo.disabled = this._historyIdx <= 0;
+        if (bRedo) bRedo.disabled = this._historyIdx >= this._historyStack.length - 1;
+    },
+    _showPhotoSourceDialog(camFn, galFn) {
+        const modal = document.getElementById('photoSourceModal');
+        if (!modal) return;
+        modal._cb = { cam: camFn, gal: galFn };
+        modal.style.display = 'flex';
+    },
+    _photoSourceModalConfirmCamera() {
+        const modal = document.getElementById('photoSourceModal');
+        if (!modal) return;
+        modal.style.display = 'none';
+        if (modal._cb && modal._cb.cam) modal._cb.cam();
+    },
+    _photoSourceModalConfirmGallery() {
+        const modal = document.getElementById('photoSourceModal');
+        if (!modal) return;
+        modal.style.display = 'none';
+        if (modal._cb && modal._cb.gal) modal._cb.gal();
+    },
+    _photoSourceModalClose() {
+        const modal = document.getElementById('photoSourceModal');
+        if (modal) modal.style.display = 'none';
     },
 
     // ── Datasheet compacto plantilla1 ────────────────────────────────────────
@@ -3639,11 +4153,16 @@ www.clauger.com`;
         const row2 = (l1,c1,l2,c2,num1,num2) =>
             `<div class="dl">${l1}</div><div class="dv${num1?' num':''}"><div style="display:flex;align-items:center;flex:1">${c1}</div></div><div class="dl">${l2}</div><div class="dv${num2?' num':''}"><div style="display:flex;align-items:center;flex:1">${c2}</div></div>`;
         const rows = [];
+        rows.push(row1('Identificador', inp('identificador', equip.identificador)));
         rows.push(row1('Fabricante', inp('fabricante', equip.fabricante)));
         rows.push(row1('Modelo', inp('modelo', equip.modelo)));
         rows.push(row2('Nº Serie', inp('numSerie', equip.numSerie), 'Nº Placa', inp('numPlaca', equip.numPlaca)));
-        rows.push(row2('Fecha fab.', inp('fechaFabricacion', equip.fechaFabricacion), 'Normativa',
-            AppState.isLegalMode ? selOpts('normativa', ['','RD3099/1977','RD138/2011','RD552/2019'], equip.normativa||'') : inp('normativa', equip.normativa||'')));
+        if (AppState.isLegalMode) {
+            rows.push(row2('Fecha fab.', inp('fechaFabricacion', equip.fechaFabricacion), 'Normativa',
+                selOpts('normativa', ['','RD3099/1977','RD138/2011','RD552/2019'], equip.normativa||'')));
+        } else {
+            rows.push(row1('Fecha fab.', inp('fechaFabricacion', equip.fechaFabricacion)));
+        }
         if (!isCompresor) {
             rows.push(row2('Fluido', selOpts('fluido', this._getFluidOptions(), equip.fluido||''), 'Vol. Interno', `<input class="di" style="text-align:right" ${tf}="volInterno" value="${equip.volInterno||''}"><span class="du">dm³</span>`));
             rows.push(row2('P.S. Máx', `<input class="di" style="text-align:right" ${tf}="presionMax" value="${equip.presionMax||''}"><span class="du">bar</span>`, 'P.S. Mín', `<input class="di" style="text-align:right" ${tf}="presionMin" value="${equip.presionMin||''}"><span class="du">bar</span>`));
@@ -3666,14 +4185,39 @@ www.clauger.com`;
         rows.push(row1('Modelo', inp('modelo', sub.modelo)));
         if (!isCompresor) rows.push(row2('Nº Serie', inp('numSerie', sub.numSerie), 'Nº Placa', inp('numPlaca', sub.numPlaca)));
         else rows.push(row1('Nº Serie', inp('numSerie', sub.numSerie)));
-        rows.push(row2('Fecha fab.', inp('fechaFabricacion', sub.fechaFabricacion), 'Normativa',
-            AppState.isLegalMode ? selOpts('normativa', ['','RD3099/1977','RD138/2011','RD552/2019'], sub.normativa||'') : inp('normativa', sub.normativa||'')));
+        if (AppState.isLegalMode) {
+            rows.push(row2('Fecha fab.', inp('fechaFabricacion', sub.fechaFabricacion), 'Normativa',
+                selOpts('normativa', ['','RD3099/1977','RD138/2011','RD552/2019'], sub.normativa||'')));
+        } else {
+            rows.push(row1('Fecha fab.', inp('fechaFabricacion', sub.fechaFabricacion)));
+        }
         if (!isCompresor) {
             rows.push(row2('Fluido', selOpts('fluido', this._getFluidOptions(), sub.fluido||''), 'Vol. Interno', `<input class="di" style="text-align:right" ${tf}="${p('volInterno')}" value="${sub.volInterno||''}"><span class="du">dm³</span>`));
             rows.push(row2('P.S. Máx', `<input class="di" style="text-align:right" ${tf}="${p('presionMax')}" value="${sub.presionMax||''}"><span class="du">bar</span>`, 'P.S. Mín', `<input class="di" style="text-align:right" ${tf}="${p('presionMin')}" value="${sub.presionMin||''}"><span class="du">bar</span>`));
         }
         if (AppState.isLegalMode) rows.push(row2('Categoría', selOpts('categoria', ['','I','II','III','IV','-'], sub.categoria||''), 'Ubicación', inp('ubicacion', sub.ubicacion)));
         else rows.push(row1('Ubicación', inp('ubicacion', sub.ubicacion)));
+        return `<div class="dsheet">${rows.join('')}</div>`;
+    },
+
+    _buildDsheetServicio(svc, svcKey, index) {
+        const tf = 'data-field';
+        const inp = (f,v) => `<input class="di" ${tf}="${f}" value="${v||''}">`;
+        const selOpts = (f,opts,v) => `<select class="di" ${tf}="${f}">${opts.map(o=>`<option value="${o}" ${v===o?'selected':''}>${o||'—'}</option>`).join('')}</select>`;
+        const row1 = (lbl,c) => `<div class="dl">${lbl}</div><div class="dv dv--wide">${c}</div>`;
+        const row2 = (l1,c1,l2,c2,num1,num2) =>
+            `<div class="dl">${l1}</div><div class="dv${num1?' num':''}"><div style="display:flex;align-items:center;flex:1">${c1}</div></div><div class="dl">${l2}</div><div class="dv${num2?' num':''}"><div style="display:flex;align-items:center;flex:1">${c2}</div></div>`;
+        const rows = [];
+        rows.push(row1('Identificación', inp('identificador', svc.identificador)));
+        rows.push(row2('Marca', inp('marca', svc.marca), 'Modelo', inp('modelo', svc.modelo)));
+        rows.push(row2('Nº Serie', inp('numSerie', svc.numSerie), 'Fecha fab.', inp('fechaFabricacion', svc.fechaFabricacion)));
+        rows.push(row2('Volumen', `<input class="di" style="text-align:right" ${tf}="volumen" value="${svc.volumen||''}"><span class="du">dm³</span>`, 'P.S. Máx', `<input class="di" style="text-align:right" ${tf}="presionMax" value="${svc.presionMax||''}"><span class="du">bar</span>`));
+        if (AppState.isLegalMode) {
+            rows.push(row2('P.S. Mín', `<input class="di" style="text-align:right" ${tf}="presionMin" value="${svc.presionMin||''}"><span class="du">bar</span>`, 'Normativa', selOpts('normativa', ['','RD3099/1977','RD138/2011','RD552/2019'], svc.normativa||'')));
+            rows.push(row2('Categoría', selOpts('categoria', ['','I','II','III','IV','-'], svc.categoria||''), 'Ubicación', inp('ubicacion', svc.ubicacion)));
+        } else {
+            rows.push(row2('P.S. Mín', `<input class="di" style="text-align:right" ${tf}="presionMin" value="${svc.presionMin||''}"><span class="du">bar</span>`, 'Ubicación', inp('ubicacion', svc.ubicacion)));
+        }
         return `<div class="dsheet">${rows.join('')}</div>`;
     },
 
@@ -3685,15 +4229,17 @@ www.clauger.com`;
         const sel = (f,opts,v,extraCls) => `<select class="ci${extraCls?' '+extraCls:''}" onchange="${oc(f)}">${opts.map(o=>`<option value="${o}" ${v===o?'selected':''}>${o||'—'}</option>`).join('')}</select>`;
         const comb = (lbl,c) => `<tr class="ab-comb"><th>${lbl}</th><td colspan="2"><div class="cell">${c}</div></td></tr>`;
         const abrow = (lbl,cA,cB,u) => `<tr><th>${lbl}</th><td class="${u?'num':''}"><div class="cell">${cA}${u?`<span class="cu">${u}</span>`:''}</div></td><td class="${u?'num':''}"><div class="cell">${cB}${u?`<span class="cu">${u}</span>`:''}</div></td></tr>`;
-        return `<table class="ab-tbl"><thead><tr><th style="width:28%">Parámetro</th><th class="ab-side" style="width:36%">Lado <b>A</b></th><th class="ab-side" style="width:36%">Lado <b>B</b></th></tr></thead><tbody>
+        const split2 = (l1,c1,l2,c2) => `<tr><th>${l1}</th><td><div class="cell">${c1}</div></td><td><div class="cell" style="display:flex;align-items:center;gap:5px"><span style="font-size:10px;font-weight:700;color:var(--ink-2);white-space:nowrap">${l2}</span>${c2}</div></td></tr>`;
+        return `<table class="ab-tbl"><colgroup><col style="width:28%"><col style="width:36%"><col style="width:36%"></colgroup><tbody>
             ${comb('Fabricante', inp('fabricante',equip.fabricante))}
             ${comb('Modelo', inp('modelo',equip.modelo))}
             ${comb('Nº Serie', inp('numSerie',equip.numSerie))}
             ${comb('Nº Placa', inp('numPlaca',equip.numPlaca))}
-            ${comb('Fecha fab.', inp('fechaFabricacion',equip.fechaFabricacion))}
+            ${AppState.isLegalMode
+                ? split2('Fecha fab.', inp('fechaFabricacion',equip.fechaFabricacion), 'Normativa', sel('normativa',['','RD3099/1977','RD138/2011','RD552/2019'],equip.normativa||'','ab-norm'))
+                : comb('Fecha fab.', inp('fechaFabricacion',equip.fechaFabricacion))}
             ${AppState.isLegalMode ? comb('Categoría', sel('categoria',['','I','II','III','IV','-'],equip.categoria||'')) : ''}
-            ${AppState.isLegalMode ? comb('Normativa', sel('normativa',['','RD3099/1977','RD138/2011','RD552/2019'],equip.normativa||'','ab-norm')) : ''}
-            <tr class="ab-divider"><td colspan="3"></td></tr>
+            <tr class="ab-subhdr"><th></th><th>Lado <b>A</b></th><th>Lado <b>B</b></th></tr>
             ${abrow('Fluido', sel('fluidoA',fl,equip.fluidoA||''), sel('fluidoB',fl,equip.fluidoB||''))}
             ${abrow('Volumen', inp('volInternoA',equip.volInternoA), inp('volInternoB',equip.volInternoB), 'dm³')}
             ${abrow('P.S. Máx', inp('presionMaxA',equip.presionMaxA), inp('presionMaxB',equip.presionMaxB), 'bar')}
@@ -3708,15 +4254,17 @@ www.clauger.com`;
         const sel = (f,opts,v,extraCls) => `<select class="ci${extraCls?' '+extraCls:''}" onchange="${oc(f)}">${opts.map(o=>`<option value="${o}" ${v===o?'selected':''}>${o||'—'}</option>`).join('')}</select>`;
         const comb = (lbl,c) => `<tr class="ab-comb"><th>${lbl}</th><td colspan="2"><div class="cell">${c}</div></td></tr>`;
         const abrow = (lbl,cA,cB,u) => `<tr><th>${lbl}</th><td class="${u?'num':''}"><div class="cell">${cA}${u?`<span class="cu">${u}</span>`:''}</div></td><td class="${u?'num':''}"><div class="cell">${cB}${u?`<span class="cu">${u}</span>`:''}</div></td></tr>`;
-        return `<table class="ab-tbl"><thead><tr><th style="width:28%">Parámetro</th><th class="ab-side" style="width:36%">Lado <b>A</b></th><th class="ab-side" style="width:36%">Lado <b>B</b></th></tr></thead><tbody>
+        const split2 = (l1,c1,l2,c2) => `<tr><th>${l1}</th><td><div class="cell">${c1}</div></td><td><div class="cell" style="display:flex;align-items:center;gap:5px"><span style="font-size:10px;font-weight:700;color:var(--ink-2);white-space:nowrap">${l2}</span>${c2}</div></td></tr>`;
+        return `<table class="ab-tbl"><colgroup><col style="width:28%"><col style="width:36%"><col style="width:36%"></colgroup><tbody>
             ${comb('Fabricante', inp('fabricante',sub.fabricante))}
             ${comb('Modelo', inp('modelo',sub.modelo))}
             ${comb('Nº Serie', inp('numSerie',sub.numSerie))}
             ${comb('Nº Placa', inp('numPlaca',sub.numPlaca))}
-            ${comb('Fecha fab.', inp('fechaFabricacion',sub.fechaFabricacion))}
+            ${AppState.isLegalMode
+                ? split2('Fecha fab.', inp('fechaFabricacion',sub.fechaFabricacion), 'Normativa', sel('normativa',['','RD3099/1977','RD138/2011','RD552/2019'],sub.normativa||'','ab-norm'))
+                : comb('Fecha fab.', inp('fechaFabricacion',sub.fechaFabricacion))}
             ${AppState.isLegalMode ? comb('Categoría', sel('categoria',['','I','II','III','IV','-'],sub.categoria||'')) : ''}
-            ${AppState.isLegalMode ? comb('Normativa', sel('normativa',['','RD3099/1977','RD138/2011','RD552/2019'],sub.normativa||'','ab-norm')) : ''}
-            <tr class="ab-divider"><td colspan="3"></td></tr>
+            <tr class="ab-subhdr"><th></th><th>Lado <b>A</b></th><th>Lado <b>B</b></th></tr>
             ${abrow('Fluido', sel('fluidoA',fl,sub.fluidoA||''), sel('fluidoB',fl,sub.fluidoB||''))}
             ${abrow('Volumen', inp('volInternoA',sub.volInternoA), inp('volInternoB',sub.volInternoB), 'dm³')}
             ${abrow('P.S. Máx', inp('presionMaxA',sub.presionMaxA), inp('presionMaxB',sub.presionMaxB), 'bar')}
@@ -3744,14 +4292,21 @@ www.clauger.com`;
             if (cont) { const s = cont.querySelector('.ab-norm'); if (s) s.value = normativa; }
         }
     },
-    _certBandHtml(forzado, toggleFn) {
-        return `<div class="cert-band">
-            <p><b>Clauger Refrigeración Ibérica S.A.</b>, como empresa frigorista habilitada, certifica que se ha efectuado la revisión del aparato a presión de acuerdo con el RD&nbsp;552/2019, con resultado:</p>
-            <div class="cert-res">
-                <span class="cert-k">Resultado</span>
-                <span class="cert-badge${forzado?' fav':''}">${forzado?'Favorable':'Pendiente'}</span>
-                ${!forzado?`<button class="res-force" onclick="${toggleFn}">⚑ Forzar favorable</button><span class="res-note">No se exporta al PDF</span>`:''}
+    _certBandHtml(rfRaw, setFavFn, setDesFn, equipType, subType, certChecklist, setCheckFn) {
+        const rf = rfRaw === true ? 'favorable' : (rfRaw || '');
+        const items = this._certChecklistItems(equipType || '', subType || '');
+        return `<div class="cert-band cert-band--legal">
+            <div class="cert-band-top">
+                <p><b>Clauger Refrigeración Ibérica S.A.</b>, empresa frigorista habilitada, certifica la revisión del aparato a presión (RD&nbsp;552/2019).</p>
+                <div class="cert-res">
+                    <span class="cert-k">Resultado</span>
+                    <div class="seg seg--sm">
+                        <button class="${rf==='desfavorable'?'seg-on-bad':''}" onclick="${setDesFn}">Desfavorable</button>
+                        <button class="${rf==='favorable'?'seg-on-ok':''}" onclick="${setFavFn}">Favorable</button>
+                    </div>
+                </div>
             </div>
+            ${items.length > 0 ? `<div class="cert-checklist">${items.map((item, i) => `<label class="cert-check-item"><input type="checkbox" ${(certChecklist && certChecklist[i]) ? 'checked' : ''} onchange="${setCheckFn},${i},this.checked)"><span>${item}</span></label>`).join('')}</div>` : ''}
         </div>`;
     },
 
@@ -3782,12 +4337,13 @@ www.clauger.com`;
         }
         newSubEquip.resultadoForzado = false;
         
-        if (subType === 'Bloque Compresor') newSubEquip.presostato = '';
+        if (subType === 'Bloque Compresor') { newSubEquip.presostato = ''; newSubEquip.presionRegulacion = ''; }
         if (subType === 'Otro') newSubEquip.nombreEquipo = '';
 
         unit.subEquipments[subType].push(newSubEquip);
         this.renderCompositeUnitsList();
         this.showToast(`${subType} añadido`, 'success');
+        if (typeof Tutorial !== 'undefined') Tutorial.onAddSubEquipment();
     },
 
     removeSubEquipment(unitKey, unitIndex, subType, subIdx) {
@@ -3801,9 +4357,10 @@ www.clauger.com`;
     },
 
     renderEquipmentList() {
+        if (AppState.currentEquipmentType === 'Servicios') { this.renderEquipoServiciosList(); return; }
         const listContainer = document.getElementById('equipmentList');
         if (!listContainer) return;
-        
+
         const equipKey = AppState.currentSubType;
         const equipments = AppState.equipmentData[equipKey] || [];
         
@@ -3824,7 +4381,7 @@ www.clauger.com`;
                 <div class="equipment-item">
                     <div class="equipment-header" onclick="App.toggleEquipment('${equipKey}',${index})">
                         <div>
-                            <div class="equipment-header-title">${typeData.icon} ${equipKey} #${index + 1}</div>
+                            <div class="equipment-header-title">${typeData.icon} ${equipKey} #${index + 1}${equip.identificador ? ` — ${equip.identificador}` : ''}</div>
                             <div class="equipment-summary">${[equip.fabricante, equip.modelo, equip.numSerie, equip.ubicacion].filter(Boolean).join(' <span class="sep">·</span> ')}</div>
                         </div>
                         <div class="equipment-header-controls">
@@ -3834,11 +4391,10 @@ www.clauger.com`;
                     </div>
                     <div class="equipment-content ${isExpanded ? 'show' : ''}" id="equipment_${equipKey}_${index}">
                         ${template === 'plantilla2'
-                            ? `<div class="form-section"><div class="form-section-title">${ic('clipboard')} Descripción</div>${this._buildAbTblEquip(equip, equipKey, index)}</div>`
+                            ? `<div class="form-section"><div class="form-section-title">${ic('clipboard')} Descripción</div><div class="ficha-top"><div class="ficha-photo">${this._fichaPhotoSlot(equip.photos?.placa||null, `App.uploadPhoto('${equipKey}',${index},'placa')`, `App.removePhoto('${equipKey}',${index},'placa')`, `App.uploadPhotoCam('${equipKey}',${index},'placa')`)}</div><div class="ficha-id">${this._buildAbTblEquip(equip, equipKey, index)}</div></div></div>`
                             : `<div class="form-section"><div class="form-section-title">${ic('clipboard')} Descripción</div><div class="ficha-top">
-                                <div class="ficha-photo">${this._fichaPhotoSlot(equip.photos?.placa||null, `App.uploadPhoto('${equipKey}',${index},'placa')`, `App.removePhoto('${equipKey}',${index},'placa')`)}</div>
+                                <div class="ficha-photo">${this._fichaPhotoSlot(equip.photos?.placa||null, `App.uploadPhoto('${equipKey}',${index},'placa')`, `App.removePhoto('${equipKey}',${index},'placa')`, `App.uploadPhotoCam('${equipKey}',${index},'placa')`)}</div>
                                 <div class="ficha-id">
-                                    <div class="ficha-grp-h"><span style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)">Identificación</span><span class="rule"></span></div>
                                     ${this._buildDsheetEquip(equip, equipKey, index)}
                                 </div>
                               </div></div>`
@@ -3850,19 +4406,27 @@ www.clauger.com`;
                         ${isCompresor ? `
                             <div class="presostato-section">
                                 <div style="font-weight:600;margin-bottom:1rem">${ic('zap')} Presostato AP</div>
-                                <div class="form-row">
-                                    ${this.createFormFields([
-                                        {name: 'Valor', path: 'presostato'}
-                                    ], [equip.presostato])}
+                                <div class="form-row" style="grid-template-columns:1fr 1fr">
+                                    ${this.createFormFields([{name: 'Valor', path: 'presostato'}], [equip.presostato])}
+                                    <div class="form-col">
+                                        <label class="form-label">Presión de regulación</label>
+                                        <div style="display:flex;align-items:center;gap:6px">
+                                            <input type="text" class="form-input" data-field="presionRegulacion" value="${equip.presionRegulacion||''}">
+                                            <span style="font-size:11px;color:var(--ink-3);font-weight:600;white-space:nowrap">bar</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ` : ''}
-                        ${AppState.isLegalMode ? this._certBandHtml(!!equip.resultadoForzado, `App.toggleResultadoForzado('${equipKey}',${index})`) : ''}
+                        ${AppState.isLegalMode ? this._certBandHtml(equip.resultadoForzado, `App.setResultadoForzado('${equipKey}',${index},'favorable')`, `App.setResultadoForzado('${equipKey}',${index},'desfavorable')`, AppState.currentEquipmentType, equipKey, equip.certChecklist || [], `App.setCertChecklist('${equipKey}',${index},`) : ''}
                         <div class="form-section">
                             <div class="form-section-title">${ic('message')} Observaciones</div>
-                            ${this.createFormFields([
-                                {name: '', type: 'textarea', path: 'observaciones', rows: 4}
-                            ], [equip.observaciones])}
+                            ${AppState.isLegalMode ? `
+                                <div class="form-row" style="grid-template-columns:1fr 1fr">
+                                    ${this.createFormFields([{name: 'Observación - Técnico', type: 'textarea', path: 'observaciones', rows: 4}], [equip.observaciones])}
+                                    ${this.createFormFields([{name: 'Observación - Legal', type: 'textarea', path: 'observacionesLegal', rows: 4}], [equip.observacionesLegal||''])}
+                                </div>
+                            ` : this.createFormFields([{name: 'Observación - Técnico', type: 'textarea', path: 'observaciones', rows: 4}], [equip.observaciones])}
                         </div>
                         ${this.renderPhotoSection(equip.photos || {placa: null, general: null}, context)}
                     </div>
@@ -3884,6 +4448,23 @@ www.clauger.com`;
                     const normativa = this._normativaFromYear(e.target.value);
                     const sel = content.querySelector('[data-field="normativa"]');
                     if (sel) { sel.value = normativa; this.updateEquipmentField(equipKey, parseInt(index), 'normativa', normativa); }
+                }
+                if (e.target.dataset.field === 'identificador') {
+                    const titleEl = content.parentElement?.querySelector('.equipment-header-title');
+                    if (titleEl) {
+                        const eqType = EQUIPMENT_TYPES[AppState.currentEquipmentType];
+                        const icon = eqType ? eqType.icon : ic('gear');
+                        const labelName = eqType?.isSingle ? (eqType.label || equipKey) : equipKey;
+                        titleEl.innerHTML = `${icon} ${labelName} #${parseInt(index) + 1}${e.target.value ? ` — ${e.target.value}` : ''}`;
+                    }
+                    // Update all sub-component titles (UC only)
+                    if (equipKey === 'Unidad Compresora') {
+                        content.querySelectorAll('h4[data-subtype]').forEach(h4 => {
+                            if (h4.dataset.subtype !== 'Otro') {
+                                h4.textContent = `${h4.dataset.subtype} #${parseInt(h4.dataset.subidx) + 1}${e.target.value ? ` — ${e.target.value}` : ''}`;
+                            }
+                        });
+                    }
                 }
             };
         });
@@ -3949,7 +4530,7 @@ www.clauger.com`;
         
         const typeData = EQUIPMENT_TYPES[AppState.currentEquipmentType];
         const newEquip = {
-            fabricante: '', modelo: '', numSerie: '', numPlaca: '', fechaFabricacion: '',
+            identificador: '', fabricante: '', modelo: '', numSerie: '', numPlaca: '', fechaFabricacion: '',
             normativa: '', ubicacion: '', categoria: '', observaciones: '',
             photos: {placa: null, general: null},
             imagenes: []
@@ -3969,7 +4550,7 @@ www.clauger.com`;
         }
         newEquip.resultadoForzado = false;
 
-        if (equipKey === 'Bloque Compresor') newEquip.presostato = '';
+        if (equipKey === 'Bloque Compresor') { newEquip.presostato = ''; newEquip.presionRegulacion = ''; }
         
         AppState.equipmentData[equipKey].push(newEquip);
         const newIndex = AppState.equipmentData[equipKey].length - 1;
@@ -3997,7 +4578,17 @@ www.clauger.com`;
     },
 
     exportJSON() {
-        // Captura cualquier campo que aún tenga el foco y no haya disparado onchange
+        this._captureActiveFields();
+        const blob = new Blob([JSON.stringify(this._buildExportData(), null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = this._buildFilename();
+        a.click();
+        this.showToast('Datos exportados', 'success');
+    },
+
+    // Captura el campo con foco antes de serializar
+    _captureActiveFields() {
         if (AppState.currentSection && AppState.sectionsData[AppState.currentSection]) {
             const workspace = document.getElementById('workspace');
             if (workspace) {
@@ -4006,12 +4597,12 @@ www.clauger.com`;
                 });
             }
         }
-        // Strip non-serializable _termoImgCache (ImageData) before export; keep base64 fields
-        const termografiaExport = (AppState.termografiaData || []).map(p => {
-            const { ...copy } = p;
-            return copy;
-        });
-        const data = {
+    },
+
+    // Construye el objeto de datos para guardar/exportar
+    _buildExportData() {
+        const termografiaExport = (AppState.termografiaData || []).map(p => ({ ...p }));
+        return {
             isLegalMode: AppState.isLegalMode,
             sectionsData: AppState.sectionsData,
             equipmentData: AppState.equipmentData,
@@ -4029,33 +4620,43 @@ www.clauger.com`;
             planificacionData: AppState.planificacionData || { textoRevision: '', textoInspeccion: '' },
             exportDate: new Date().toISOString()
         };
-        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        let filename;
+    },
+
+    // Genera el nombre de fichero según modo y datos del informe
+    _buildFilename() {
         if (AppState.isLegalMode) {
             const _inst = AppState.sectionsData['datos_datos_instalacion'] || {};
-            const _rev = AppState.sectionsData['datos_datos_revision'] || {};
+            const _rev  = AppState.sectionsData['datos_datos_revision'] || {};
             const _cert = AppState.sectionsData['datos_datos_certificado'] || {};
             const _fRev = _rev['FECHA REVISIÓN'] || '';
-            const _ano = (_fRev.match(/\d{4}/) || [new Date().getFullYear()])[0];
-            const _sis = (_inst['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
-            const _dMap = {'Favorable (Sin defectos)':'F','Favorable (Defectos leves)':'FDL','Desfavorable':'D','Negativa':'N','Condicionado':'C','Comunicación deficiencias':'CD'};
-            const _dIni = _dMap[_cert['DICTAMEN']] || ((_cert['DICTAMEN']||'SIN_DICTAMEN').replace(/[\s()]+/g,'_'));
+            const _ano  = (_fRev.match(/\d{4}/) || [new Date().getFullYear()])[0];
+            const _sis  = (_inst['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
             const _nRev = (_cert['NÚMERO REVISIÓN'] || '').trim().replace(/\s+/g, '_') || 'SIN_REV';
-            filename = `${_ano}_Legal_${_sis}_${_dIni}_${_nRev}.json`;
-        } else {
-            const informe = AppState.sectionsData['datos_datos_informe'] || {};
-            const sistema = (informe['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
-            const numRev = (informe['NÚMERO REVISIÓN'] || '').trim().replace(/\s+/g, '_') || 'SIN_REV';
-            filename = `${new Date().getFullYear()}_Técnico_${sistema}_${numRev}.json`;
+            return `${_ano}_${_sis}_${_nRev}.json`;
         }
-        a.download = filename;
-        a.click();
-        this.showToast('Datos exportados', 'success');
+        const informe = AppState.sectionsData['datos_datos_informe'] || {};
+        const sistema = (informe['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
+        const numRev  = (informe['NÚMERO REVISIÓN'] || '').trim().replace(/\s+/g, '_') || 'SIN_REV';
+        return `${new Date().getFullYear()}_${sistema}_${numRev}.json`;
     },
 
     loadJSON() {
+        if ('showOpenFilePicker' in window) {
+            window.showOpenFilePicker({
+                types: [{ description: 'Archivo de revisión Clauger', accept: { 'application/json': ['.json'] } }]
+            }).then(async ([handle]) => {
+                try {
+                    const file = await handle.getFile();
+                    const data = JSON.parse(await file.text());
+                    if (this._applyLoadedData(data)) {
+                        _fileHandle = handle;
+                        this._updateSaveBtn();
+                    }
+                } catch { this.showToast('Error al cargar', 'error'); }
+            }).catch(err => { if (err.name !== 'AbortError') this.showToast('Error al cargar', 'error'); });
+            return;
+        }
+        // Fallback para navegadores sin File System Access API
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.json';
@@ -4065,128 +4666,141 @@ www.clauger.com`;
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     try {
-                        const data = JSON.parse(event.target.result);
-                        
-                        if (data.isLegalMode && !AppState.isLegalMode) {
-                            if (!confirm('Este archivo fue creado en Modo Legal. Algunas secciones no estarán disponibles en Modo Técnico. ¿Desea continuar?')) {
-                                return;
-                            }
-                        }
-                        
-                        if (data.sectionsData) {
-                            Object.keys(data.sectionsData).forEach(sectionKey => {
-                                const sectionData = data.sectionsData[sectionKey];
-                                Object.keys(sectionData).forEach(itemKey => {
-                                    const item = sectionData[itemKey];
-                                    if (item && typeof item === 'object' && !item.hasOwnProperty('gravedad')) {
-                                        item.gravedad = '';
-                                        item.correccion = '';
-                                    }
-                                });
-                            });
-                        }
-                        
-                        AppState.sectionsData = data.sectionsData || {};
-                        AppState.equipmentData = data.equipmentData || {};
-                        
-                        Object.keys(AppState.equipmentData).forEach(equipKey => {
-                            AppState.equipmentData[equipKey].forEach(equip => {
-                                ['valvulas', 'valvulasA', 'valvulasB'].forEach(valvKey => {
-                                    if (equip[valvKey]?.items) {
-                                        equip[valvKey].items = equip[valvKey].items.map(valv => {
-                                            if (valv.serieAntigua !== undefined) {
-                                                return {
-                                                    marca: valv.marca || '',
-                                                    modelo: valv.modelo || '',
-                                                    indicadorDescarga: valv.indicadorSifon === 'SI' ? 'Sifón' : valv.indicadorLuz === 'SI' ? 'Luz' : '',
-                                                    serieExistente: valv.serieAntigua || '',
-                                                    fechaExistente: valv.fecha || '',
-                                                    presionExistente: valv.presionTarado || '',
-                                                    serieNueva: valv.serieNueva || '',
-                                                    fechaNueva: '',
-                                                    presionNueva: ''
-                                                };
-                                            }
-                                            return valv;
-                                        });
-                                    }
-                                });
-                                
-                                if (equip.subEquipments) {
-                                    Object.keys(equip.subEquipments).forEach(subType => {
-                                        equip.subEquipments[subType].forEach(subEquip => {
-                                            ['valvulas', 'valvulasA', 'valvulasB'].forEach(valvKey => {
-                                                if (subEquip[valvKey]?.items) {
-                                                    subEquip[valvKey].items = subEquip[valvKey].items.map(valv => {
-                                                        if (valv.serieAntigua !== undefined) {
-                                                            return {
-                                                                marca: valv.marca || '',
-                                                                modelo: valv.modelo || '',
-                                                                indicadorDescarga: valv.indicadorSifon === 'SI' ? 'Sifón' : valv.indicadorLuz === 'SI' ? 'Luz' : '',
-                                                                serieExistente: valv.serieAntigua || '',
-                                                                fechaExistente: valv.fecha || '',
-                                                                presionExistente: valv.presionTarado || '',
-                                                                serieNueva: valv.serieNueva || '',
-                                                                fechaNueva: '',
-                                                                presionNueva: ''
-                                                            };
-                                                        }
-                                                        return valv;
-                                                    });
-                                                }
-                                            });
-                                        });
-                                    });
-                                }
-                            });
-                        });
-                        
-                        AppState.detectorsData = data.detectorsData || [];
-
-                        AppState.detectorsData.forEach(detector => {
-                            if (!detector.imagenes) detector.imagenes = [];
-                        });
-
-                        AppState.instalacionCircuitos = data.instalacionCircuitos || AppState.instalacionCircuitos;
-                        AppState.instalacionSalas = data.instalacionSalas || AppState.instalacionSalas;
-                        AppState.instalacionCamaras = data.instalacionCamaras || AppState.instalacionCamaras;
-                        AppState.serviciosData = data.serviciosData || [];
-                        AppState.portadaData = data.portadaData || { titulo:'',subtitulo:'',cliente:'',direccion:'',cp:'',localidad:'',provincia:'',referencia:'',anio:'' };
-                        AppState.indiceData = data.indiceData || { items: [] };
-                        AppState.contraportadaData = data.contraportadaData || { texto: '' };
-                        AppState.certPsvArchivos = data.certPsvArchivos || [];
-                        AppState.actaInicialArchivos = data.actaInicialArchivos || [];
-                        AppState.termografiaData = data.termografiaData || [];
-                        AppState.planificacionData = data.planificacionData || { textoRevision: '', textoInspeccion: '' };
-
-                        // Rebuild _termoImgCache from saved base64 images
-                        this._termoImgCache = {};
-                        AppState.termografiaData.forEach((punto, idx) => {
-                            if (punto.imagen) {
-                                const img = new Image();
-                                img.onload = () => {
-                                    const oc = document.createElement('canvas');
-                                    oc.width = img.naturalWidth; oc.height = img.naturalHeight;
-                                    oc.getContext('2d').drawImage(img, 0, 0);
-                                    this._termoImgCache[idx] = oc.getContext('2d').getImageData(0, 0, oc.width, oc.height);
-                                };
-                                img.src = punto.imagen;
-                            }
-                        });
-
-                        this.calcularDatosRevision();
-                        this.renderSidebar();
-                        this.renderWorkspace();
-                        this.showToast('Datos cargados', 'success');
-                        this._doAutosave();
-                    } catch {
-                        this.showToast('Error al cargar', 'error');
-                    }
+                        this._applyLoadedData(JSON.parse(event.target.result));
+                    } catch { this.showToast('Error al cargar', 'error'); }
                 };
                 reader.readAsText(file);
             }
         };
         input.click();
+    },
+
+    // Aplica los datos cargados al AppState y re-renderiza. Devuelve false si el usuario cancela.
+    _applyLoadedData(data) {
+        if (data.isLegalMode && !AppState.isLegalMode) {
+            if (!confirm('Este archivo fue creado en Modo Legal. Algunas secciones no estarán disponibles en Modo Técnico. ¿Desea continuar?')) return false;
+        }
+        if (data.sectionsData) {
+            Object.keys(data.sectionsData).forEach(sectionKey => {
+                const sectionData = data.sectionsData[sectionKey];
+                Object.keys(sectionData).forEach(itemKey => {
+                    const item = sectionData[itemKey];
+                    if (item && typeof item === 'object' && !item.hasOwnProperty('gravedad')) {
+                        item.gravedad = '';
+                        item.correccion = '';
+                    }
+                });
+            });
+        }
+        AppState.sectionsData = data.sectionsData || {};
+        AppState.equipmentData = data.equipmentData || {};
+        const _migrateValvs = (items) => items.map(valv => {
+            if (valv.serieAntigua === undefined) return valv;
+            return {
+                marca: valv.marca || '', modelo: valv.modelo || '',
+                indicadorDescarga: valv.indicadorSifon === 'SI' ? 'Sifón' : valv.indicadorLuz === 'SI' ? 'Luz' : '',
+                serieExistente: valv.serieAntigua || '', fechaExistente: valv.fecha || '',
+                presionExistente: valv.presionTarado || '', serieNueva: valv.serieNueva || '',
+                fechaNueva: '', presionNueva: ''
+            };
+        });
+        Object.keys(AppState.equipmentData).forEach(equipKey => {
+            AppState.equipmentData[equipKey].forEach(equip => {
+                ['valvulas','valvulasA','valvulasB'].forEach(k => { if (equip[k]?.items) equip[k].items = _migrateValvs(equip[k].items); });
+                if (equip.subEquipments) Object.keys(equip.subEquipments).forEach(subType => {
+                    equip.subEquipments[subType].forEach(sub => {
+                        ['valvulas','valvulasA','valvulasB'].forEach(k => { if (sub[k]?.items) sub[k].items = _migrateValvs(sub[k].items); });
+                    });
+                });
+            });
+        });
+        AppState.detectorsData = data.detectorsData || [];
+        AppState.detectorsData.forEach(d => { if (!d.imagenes) d.imagenes = []; });
+        AppState.instalacionCircuitos = data.instalacionCircuitos || AppState.instalacionCircuitos;
+        AppState.instalacionSalas     = data.instalacionSalas     || AppState.instalacionSalas;
+        AppState.instalacionCamaras   = data.instalacionCamaras   || AppState.instalacionCamaras;
+        AppState.serviciosData        = data.serviciosData        || [];
+        AppState.portadaData          = data.portadaData          || { titulo:'',subtitulo:'',cliente:'',direccion:'',cp:'',localidad:'',provincia:'',referencia:'',anio:'' };
+        AppState.indiceData           = data.indiceData           || { items: [] };
+        AppState.contraportadaData    = data.contraportadaData    || { texto: '' };
+        AppState.certPsvArchivos      = data.certPsvArchivos      || [];
+        AppState.actaInicialArchivos  = data.actaInicialArchivos  || [];
+        AppState.termografiaData      = data.termografiaData      || [];
+        AppState.planificacionData    = data.planificacionData    || { textoRevision: '', textoInspeccion: '' };
+        this._termoImgCache = {};
+        AppState.termografiaData.forEach((punto, idx) => {
+            if (punto.imagen) {
+                const img = new Image();
+                img.onload = () => {
+                    const oc = document.createElement('canvas');
+                    oc.width = img.naturalWidth; oc.height = img.naturalHeight;
+                    oc.getContext('2d').drawImage(img, 0, 0);
+                    this._termoImgCache[idx] = oc.getContext('2d').getImageData(0, 0, oc.width, oc.height);
+                };
+                img.src = punto.imagen;
+            }
+        });
+        this.calcularDatosRevision();
+        this.renderSidebar();
+        this.renderWorkspace();
+        this.showToast('Datos cargados', 'success');
+        this._doAutosave();
+        return true;
+    },
+
+    // Guarda en el mismo archivo (File System Access API) o crea uno nuevo si no hay handle
+    async saveJSON() {
+        this._captureActiveFields();
+        if (!('showSaveFilePicker' in window)) {
+            // Navegador sin soporte (Firefox): descarga normal
+            this.exportJSON();
+            return;
+        }
+        try {
+            if (!_fileHandle) {
+                _fileHandle = await window.showSaveFilePicker({
+                    suggestedName: this._buildFilename(),
+                    types: [{ description: 'Archivo de revisión Clauger', accept: { 'application/json': ['.json'] } }]
+                });
+                this._updateSaveBtn();
+            }
+            const blob = new Blob([JSON.stringify(this._buildExportData(), null, 2)], { type: 'application/json' });
+            const writable = await _fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            this.showToast('Guardado ✓', 'success');
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            // Handle puede haberse vuelto inválido (archivo eliminado, etc.)
+            _fileHandle = null;
+            this._updateSaveBtn();
+            this.showToast('No se pudo guardar — elige el archivo de nuevo', 'error');
+        }
+    },
+
+    // Actualiza la apariencia del botón Guardar y el badge con el nombre del archivo
+    _updateSaveBtn() {
+        const btn   = document.getElementById('btnGuardar');
+        const label = document.getElementById('btnGuardarLabel');
+        const badge = document.getElementById('autosaveBadge');
+        if (!btn) return;
+        if (_fileHandle) {
+            btn.style.cssText += ';background:var(--navy,#1a2744);color:#fff;border-color:var(--navy,#1a2744)';
+            if (label) label.textContent = 'Guardar';
+            btn.title = `Guardando en: ${_fileHandle.name}`;
+            if (badge) {
+                badge.style.display = 'inline-block';
+                badge.textContent   = _fileHandle.name;
+                badge.title         = `Sesión vinculada a: ${_fileHandle.name}`;
+            }
+        } else {
+            btn.style.background   = '';
+            btn.style.color        = '';
+            btn.style.borderColor  = '';
+            if (label) label.textContent = 'Guardar';
+            btn.title = 'Guardar sesión en archivo';
+            if (badge) badge.style.display = 'none';
+        }
     },
 
     async generateActaInicial() {
@@ -4455,17 +5069,44 @@ www.clauger.com`;
             const grpE     = checklistItems.filter(i => i.id.startsWith('E'));
             const grpFG    = checklistItems.filter(i => i.id.startsWith('F') || i.id.startsWith('G'));
 
+            // ── Datos portada/índice/contraportada ──
+            const _pdDefaults = this._getPortadaDefaults();
+            const _pdData = AppState.portadaData || {};
+            const pvL = (k) => _pdData[k] || _pdDefaults[k] || '';
+            const _indItemsL = (() => {
+                if (!AppState.indiceData.items || !AppState.indiceData.items.length) return [
+                    {key:'acta',label:'ACTA',num:'1'},{key:'equipos',label:'CERTIFICADO EQUIPOS A PRESIÓN',num:'2'},
+                    {key:'valvulas',label:'CERTIFICADO VÁLVULAS DE SEGURIDAD',num:'3'},{key:'detectores',label:'CERTIFICADO DETECTOR',num:'4'},
+                    {key:'termografia',label:'TERMOGRAFÍA',num:'5'},{key:'planificacion',label:'PLANIFICACIÓN',num:'6'}
+                ];
+                return AppState.indiceData.items;
+            })();
+            const _contraTextoL = (AppState.contraportadaData || {}).texto || 'CLAUGER REFRIGERACIÓN IBERIA S.A.\nEmpresa Frigorista Autorizada\n\nPara cualquier consulta o información adicional relacionada con este informe, no dude en ponerse en contacto con nuestro departamento técnico.\n\nwww.clauger.com';
+
             const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <title>${(()=>{const _f=revision['FECHA REVISIÓN']||'';const _y=(_f.match(/\d{4}/)||[new Date().getFullYear()])[0];const _d=(certificado['DICTAMEN']||'ACTA').toUpperCase().replace(/[()]/g,'').replace(/\s+/g,' ').trim();const _s=(informe['SISTEMA']||'SIN_SISTEMA').trim();const _n=(certificado['NÚMERO REVISIÓN']||'SIN_REV').trim();return `${_y}_${_d}_${_s}_${_n}`;})()}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-:root{--navy:#1a2744;--navy-2:#0f1830;--accent:#2f5aa6;--accent-2:#5b86c9;--ink:#1a2744;--ink-2:#515b73;--ink-3:#8b93a7;--line:#e7eaf1;--line-2:#d9dee9;--soft:#f3f5f9;--ok:#1f8a4c;--bad:#c0392b;--warn:#c2871a}
-body{font-family:'Inter',Arial,sans-serif;font-size:10pt;color:var(--ink);background:#e8e8e8}
+:root{--navy:#1a2744;--navy-2:#0f1830;--accent:#2f5aa6;--accent-2:#5b86c9;--ink:#1a2744;--ink-2:#515b73;--ink-3:#8b93a7;--line:#e7eaf1;--line-2:#d9dee9;--soft:#f3f5f9;--ok:#1f8a4c;--bad:#c0392b;--warn:#c2871a;--rouge:#d32525}
+body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:var(--ink);background:#e8e8e8}
+.page{width:794px;min-height:1123px;background:#fff;position:relative;overflow:hidden;display:flex;flex-direction:column;margin:0 auto}
+.page-cover{background:#fff;color:var(--ink)}.page-back{background:#fff;color:var(--ink)}
+.pad-pg{padding:54px 60px 70px;flex:1;display:flex;flex-direction:column}
+.rh-pg{display:flex;align-items:center;justify-content:space-between;padding:18px 60px;border-bottom:1px solid var(--line)}
+.rh-pg img{height:20px;object-fit:contain;display:block}
+.rh-pg .meta{font-size:10px;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;text-align:right;line-height:1.5}
+.rh-pg .meta b{color:var(--ink-2);font-weight:600}
+.rf-pg{position:absolute;left:60px;right:60px;bottom:22px;display:flex;justify-content:space-between;font-size:9.5px;color:var(--ink-3);letter-spacing:.03em;padding-top:9px;border-top:1px solid var(--line)}
+.toc .it{display:flex;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.toc .it .n{font-size:11px;font-weight:700;color:var(--ink-3);width:26px}
+.toc .it .t{font-size:12.5px;font-weight:500}
+.toc .it .dots{flex:1;border-bottom:1px dotted var(--line-2);transform:translateY(-3px)}
+.toc .it .pg{font-size:11.5px;font-weight:600;color:var(--ink-2)}
+.peyebrow-pg{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:5px}
+.ptitle-pg{font-size:21px;font-weight:800;letter-spacing:-.01em;margin-bottom:16px}
 .wrap{width:794px;margin:0 auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.18)}
 .rh{display:flex;align-items:center;justify-content:space-between;padding:16px 56px;border-bottom:1px solid var(--line)}
 .rh img{height:20px;object-fit:contain;display:block}
@@ -4525,6 +5166,9 @@ tr.r-np td{color:inherit}
 .print-ftr{display:none}
 @media print{
   body{background:#fff}
+  .page{width:210mm;min-height:296.6mm;box-sizing:border-box;margin:0;box-shadow:none;overflow:visible;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
+  .page:last-child{page-break-after:avoid;break-after:auto}
+  .page-cover,.page-back{min-height:296.6mm;overflow:hidden}
   .wrap{width:210mm;margin:0;box-shadow:none}
   .print-bar{display:none}
   .page-break{page-break-before:always;padding-top:20px}
@@ -4540,6 +5184,63 @@ tr.r-np td{color:inherit}
 </style>
 </head>
 <body>
+<!-- ══ PORTADA ══ -->
+<div class="page page-cover">
+  <div style="display:flex;height:5px"><i style="width:120px;background:var(--rouge)"></i><i style="flex:1;background:var(--accent)"></i></div>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:46px 60px 0">
+    ${logoBase64?`<img src="${logoBase64}" style="height:30px;object-fit:contain;display:block" alt="CLAUGER">`:`<span style="font-weight:800;font-size:22px;color:var(--navy)">CLAUGER</span>`}
+    <div style="text-align:right;font-size:10px;line-height:1.7;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)">
+      ${pvL('referencia')?`<b style="display:block;color:var(--ink-2);font-weight:700;font-size:11px">${pvL('referencia')}</b>`:''}Informe técnico${pvL('anio')?' &middot; '+pvL('anio'):''}
+    </div>
+  </div>
+  <img src="imagenes/clauger-macaron-faint.png" style="position:absolute;top:120px;right:-70px;width:430px;opacity:.5" alt="">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:0 60px;position:relative;z-index:1">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.26em;text-transform:uppercase;color:var(--accent)">Informe técnico reglamentario</div>
+    <div style="font-size:46px;font-weight:800;line-height:1.06;letter-spacing:-.02em;color:var(--navy);margin-top:22px">${pvL('titulo')}</div>
+    <div style="font-size:16px;color:var(--ink-2);margin-top:16px">${pvL('subtitulo')}</div>
+    <div style="display:flex;align-items:center;gap:14px;margin:32px 0 40px">
+      <i style="width:60px;height:3px;background:var(--accent)"></i>
+      <span style="font-weight:700;color:var(--accent);font-size:20px;line-height:1">&#8600;</span>
+    </div>
+    <div style="border:1px solid var(--line-2);border-radius:10px;padding:26px 30px;max-width:430px">
+      <div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:14px">Datos del cliente</div>
+      ${pvL('cliente')?`<div style="font-size:18px;font-weight:700;color:var(--navy)">${pvL('cliente')}</div>`:''}
+      ${pvL('direccion')?`<div style="font-size:13px;color:var(--ink-2);line-height:1.6;margin-top:6px">${pvL('direccion')}</div>`:''}
+      ${(pvL('cp')||pvL('localidad'))?`<div style="font-size:13px;color:var(--ink-2);line-height:1.6">${[pvL('cp'),pvL('localidad')].filter(Boolean).join(' &mdash; ')}</div>`:''}
+      ${pvL('provincia')?`<div style="font-size:13px;color:var(--ink-2);line-height:1.6">${pvL('provincia')}</div>`:''}
+      <div style="display:flex;gap:30px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)">
+        ${pvL('referencia')?`<div><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:700">Referencia</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:4px">${pvL('referencia')}</div></div>`:''}
+        ${pvL('anio')?`<div><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:700">Año</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-top:4px">${pvL('anio')}</div></div>`:''}
+      </div>
+    </div>
+  </div>
+  <div style="padding:18px 60px 40px">
+    <div style="border-top:1px solid var(--line);padding-top:16px;display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);letter-spacing:.04em">
+      <span><b style="color:var(--ink-2)">CLAUGER Refrigeración Iberia S.A.</b> &middot; Empresa Frigorista Autorizada</span>
+      <span>Documento confidencial</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ÍNDICE ══ -->
+<div class="page">
+  <div class="rh-pg">
+    ${logoBase64?`<img src="${logoBase64}" alt="CLAUGER">`:`<span style="font-weight:800;font-size:15px;color:var(--navy)">CLAUGER</span>`}
+    <div class="meta"><b>Índice de documentos</b> &middot; Revisión Final</div>
+  </div>
+  <div class="pad-pg">
+    <div class="peyebrow-pg">Contenido</div>
+    <div class="ptitle-pg">Índice de documentos</div>
+    <div class="toc">
+      ${_indItemsL.map(item=>`<div class="it"><span class="n">${String(item.num||'').padStart(2,'0')}</span><span class="t">${item.label}</span><span class="dots"></span><span class="pg">&mdash;</span></div>`).join('')}
+    </div>
+  </div>
+  <div class="rf-pg">
+    <span><b>CLAUGER Ibérica, S.L.U.</b> &middot; Documento confidencial</span>
+    <span>${pvL('referencia')||''}</span>
+  </div>
+</div>
+
 <div class="print-ftr"><span><b>CLAUGER Ibérica, S.L.U.</b> &middot; Documento confidencial</span><span>${certificado['ID INFORME']||''}</span></div>
 <div class="wrap">
 
@@ -4777,7 +5478,35 @@ ${(() => {
 </div><!-- /body -->
 </div><!-- /wrap -->
 
+<!-- ══ CONTRAPORTADA ══ -->
+<div class="page page-back">
+  <div style="display:flex;height:5px"><i style="width:120px;background:var(--rouge)"></i><i style="flex:1;background:var(--accent)"></i></div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 60px;text-align:center">
+    <img src="imagenes/clauger-macaron-color.png" style="width:78px;object-fit:contain;display:block;margin-bottom:30px" alt="CLAUGER">
+    <div style="font-size:24px;font-weight:700;color:var(--navy);line-height:1.3;max-width:440px;letter-spacing:-.02em;white-space:pre-line">${_contraTextoL.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+    <div style="width:60px;height:3px;background:var(--accent);margin:34px auto"></div>
+    <div style="display:flex;gap:64px;justify-content:center;text-align:left">
+      <div>
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:10px">Contacto</div>
+        <div style="font-size:13px;color:var(--ink-2);line-height:1.7"><b style="color:var(--navy)">CLAUGER Refrigeración Iberia S.A.</b><br>Empresa Frigorista Autorizada<br>www.clauger.com</div>
+      </div>
+      ${pvL('referencia')?`<div>
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:10px">Documento</div>
+        <div style="font-size:13px;color:var(--ink-2);line-height:1.7">Ref. <b style="color:var(--navy)">${pvL('referencia')}</b>${pvL('anio')?`<br>Emitido en ${pvL('anio')}`:''}
+<br>Confidencial — uso del cliente</div>
+      </div>`:''}
+    </div>
+  </div>
+  <div style="padding:22px 60px 40px">
+    <div style="border-top:1px solid var(--line);padding-top:16px;display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);letter-spacing:.04em">
+      <span><b style="color:var(--ink-2)">CLAUGER Refrigeración Iberia S.A.</b></span>
+      <span>www.clauger.com &middot; Documento confidencial</span>
+    </div>
+  </div>
+</div>
+
 <div class="print-bar">
+  <span style="color:#ffdd57;font-size:9px;font-weight:600;letter-spacing:.02em">&#9888; En Destino elige &laquo;Guardar como PDF&raquo; (no &laquo;Microsoft Print to PDF&raquo;) &middot; M&aacute;rgenes: Ninguno &middot; Gr&aacute;ficos de fondo: activado</span>
   <button class="btn-p" onclick="window.print()">IMPRIMIR / GUARDAR PDF</button>
   <button class="btn-c" onclick="window.close()">CERRAR</button>
 </div>
@@ -4811,13 +5540,21 @@ ${(() => {
 
             if (!AppState.indiceData.items || AppState.indiceData.items.length === 0) {
                 AppState.indiceData.items = [
-                    { label: 'ACTA', num: '1' },
-                    { label: 'CERTIFICADO EQUIPOS A PRESIÓN', num: '2' },
-                    { label: 'CERTIFICADO VÁLVULAS DE SEGURIDAD', num: '3' },
-                    { label: 'CERTIFICADO DETECTOR', num: '4' },
-                    { label: 'TERMOGRAFÍA', num: '5' },
-                    { label: 'PLANIFICACIÓN', num: '6' }
+                    { key: 'acta',          label: 'ACTA',                             num: '1' },
+                    { key: 'equipos',       label: 'CERTIFICADO EQUIPOS A PRESIÓN',     num: '2' },
+                    { key: 'valvulas',      label: 'CERTIFICADO VÁLVULAS DE SEGURIDAD', num: '3' },
+                    { key: 'detectores',    label: 'CERTIFICADO DETECTOR',              num: '4' },
+                    { key: 'termografia',   label: 'TERMOGRAFÍA',                       num: '5' },
+                    { key: 'planificacion', label: 'PLANIFICACIÓN',                     num: '6' }
                 ];
+            } else {
+                const _VK = ['acta','equipos','valvulas','detectores','termografia','planificacion'];
+                const _LKM = {'ACTA':'acta','CERTIFICADO EQUIPOS A PRESIÓN':'equipos','CERTIFICADO VÁLVULAS DE SEGURIDAD':'valvulas','CERTIFICADO DETECTOR':'detectores','TERMOGRAFÍA':'termografia','PLANIFICACIÓN':'planificacion'};
+                AppState.indiceData.items.forEach((item, idx) => {
+                    if (!item.key || !_VK.includes(item.key)) {
+                        item.key = _LKM[(item.label||'').toUpperCase().trim()] || 'custom_' + idx;
+                    }
+                });
             }
             const indiceItems = AppState.indiceData.items;
 
@@ -4838,7 +5575,27 @@ ${(() => {
             const plan = AppState.planificacionData || { textoRevision: '', textoInspeccion: '' };
             const textoRev  = plan.textoRevision  || `La periodicidad para realizar las revisiones periódicas será como norma general de ${periodRev}, salvo que los sistemas que utilicen una carga de refrigerante superior a 3000 kg y posean una antigüedad superior a quince años se revisarán al menos cada dos años.\nLa próxima revisión obligatoria de la instalación frigorífica, realizada por parte de una empresa frigorista autorizada de Nivel ${nivel} deberá realizarse antes de ${formatFecha(proxRev)}.`;
             const textoInsp = plan.textoInspeccion || `Como norma general las instalaciones de Nivel 2 se inspeccionarán por parte de un Órgano de Control cada 10 años, salvo las que utilicen gases de tipo HFC, las cuales, independientemente de su nivel, se inspeccionarán en función de las Tn equivalentes de CO2, ver tabla 1.\n\nLa próxima inspección periódica obligatoria de la instalación frigorífica, realizada por parte de Órgano de Control deberá realizarse antes de ${formatFecha(proxInsp)}.`;
-            const contraTexto = AppState.contraportadaData.texto || 'CLAUGER IBÉRICA S.L.U.\nEmpresa Frigorista Autorizada\n\nPara cualquier consulta o información adicional relacionada con este informe, no dude en ponerse en contacto con nuestro departamento técnico.\n\nwww.clauger.com';
+            const contraTexto = AppState.contraportadaData.texto || 'CLAUGER REFRIGERACIÓN IBERIA S.A.\nEmpresa Frigorista Autorizada\n\nPara cualquier consulta o información adicional relacionada con este informe, no dude en ponerse en contacto con nuestro departamento técnico.\n\nwww.clauger.com';
+
+            // ── Datos para tabla de periodicidad revisión en planificación ──
+            const _fechaPS = instalacion['FECHA PS'] || '';
+            const _totalKg = (AppState.instalacionCircuitos || []).reduce((s, c) => s + (parseFloat(c.carga) || 0), 0);
+            let _ageYears = null;
+            if (_fechaPS) { const _dp = new Date(_fechaPS); if (!isNaN(_dp)) _ageYears = (Date.now() - _dp.getTime()) / (1000*60*60*24*365.25); }
+            const _isAntigua = _ageYears !== null && _ageYears >= 15;
+            const _isHeavy   = _totalKg >= 3000;
+
+            // ── Índice dinámico ──
+            const _defaultIndItems = [
+                {key:'acta',label:'ACTA',num:'1'},{key:'equipos',label:'CERTIFICADO EQUIPOS A PRESIÓN',num:'2'},
+                {key:'valvulas',label:'CERTIFICADO VÁLVULAS DE SEGURIDAD',num:'3'},{key:'detectores',label:'CERTIFICADO DETECTOR',num:'4'},
+                {key:'termografia',label:'TERMOGRAFÍA',num:'5'},{key:'planificacion',label:'PLANIFICACIÓN',num:'6'}
+            ];
+            const _indItems = (AppState.indiceData && AppState.indiceData.items && AppState.indiceData.items.length > 0)
+                ? AppState.indiceData.items
+                : _defaultIndItems;
+            const _hasSec = (key) => _indItems.some(i => i.key === key);
+            const _secNum = (key) => { const idx = _indItems.findIndex(i => i.key === key); return idx >= 0 ? idx + 1 : 0; };
 
             // ── Render PDF attachments to images ──
             const _renderPdfPages = async (archivos) => {
@@ -4855,8 +5612,10 @@ ${(() => {
             };
 
             // ── Logo paths ──
-            const LOGO_COLOR = 'imagenes/clauger-color.png';
-            const LOGO_WHITE = 'imagenes/clauger-logo-white.png';
+            const LOGO_COLOR         = 'imagenes/clauger-color.png';
+            const LOGO_WHITE         = 'imagenes/clauger-logo-white.png';
+            const LOGO_MACARON       = 'imagenes/clauger-macaron-color.png';
+            const LOGO_MACARON_FAINT = 'imagenes/clauger-macaron-faint.png';
 
             const actaInicialImgs = await _renderPdfPages(AppState.actaInicialArchivos);
             const certPsvImgs     = await _renderPdfPages(AppState.certPsvArchivos);
@@ -4868,8 +5627,8 @@ ${(() => {
             // ── Shared CSS ──
             const SHARED_CSS = `
 *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-:root{--navy:#1a2744;--navy-2:#0f1830;--accent:#2f5aa6;--accent-2:#5b86c9;--ink:#1a2744;--ink-2:#515b73;--ink-3:#8b93a7;--line:#e7eaf1;--line-2:#d9dee9;--soft:#f3f5f9;--ok:#1f8a4c;--bad:#c0392b;--warn:#c2871a}
-body{font-family:'Inter',Arial,sans-serif;font-size:10pt;color:var(--ink);background:#e8e8e8}
+:root{--navy:#1a2744;--navy-2:#0f1830;--accent:#2f5aa6;--accent-2:#5b86c9;--ink:#1a2744;--ink-2:#515b73;--ink-3:#8b93a7;--line:#e7eaf1;--line-2:#d9dee9;--soft:#f3f5f9;--ok:#1f8a4c;--bad:#c0392b;--warn:#c2871a;--rouge:#d32525}
+body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:var(--ink);background:#e8e8e8}
 .page{width:794px;min-height:1123px;background:#fff;position:relative;overflow:hidden;display:flex;flex-direction:column;margin:0 auto}
 .pad{padding:54px 60px 70px;flex:1;display:flex;flex-direction:column}
 .rh{display:flex;align-items:center;justify-content:space-between;padding:18px 60px;border-bottom:1px solid var(--line)}
@@ -4906,9 +5665,9 @@ table.tbl{width:100%;border-collapse:collapse}
 .ptitle{font-size:21px;font-weight:800;letter-spacing:-.01em;margin-bottom:0}
 .chip{display:inline-flex;align-items:center;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:999px}
 .chip.cat{color:var(--accent);background:#eaf0fa}
-.photos{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px}
+.photos{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:4px}
 .ph{border:1px solid var(--line);border-radius:5px;overflow:hidden;background:var(--soft)}
-.ph .img{height:180px;background-size:cover;background-position:center}
+.ph .img{height:130px;background-size:cover;background-position:center}
 .ph .cap{font-size:9.5px;color:var(--ink-2);padding:7px 11px;border-top:1px solid var(--line)}
 .ph.empty{display:flex;align-items:center;justify-content:center;min-height:200px;border-style:dashed;color:var(--ink-3);font-size:10.5px}
 .toc .grp{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:20px 0 5px}
@@ -4917,8 +5676,11 @@ table.tbl{width:100%;border-collapse:collapse}
 .toc .it .t{font-size:12.5px;font-weight:500}
 .toc .it .dots{flex:1;border-bottom:1px dotted var(--line-2);transform:translateY(-3px)}
 .toc .it .pg{font-size:11.5px;font-weight:600;color:var(--ink-2)}
-.page-cover{background:var(--navy);color:#fff}
-.page-divider{background:var(--navy);color:#fff;align-items:flex-start}
+.page-cover{background:#fff;color:var(--ink)}
+.page-divider{background:#fff;color:var(--ink);align-items:flex-start}
+.page-back{background:#fff;color:var(--ink)}
+.page-img{padding:0;align-items:center;justify-content:center}
+.page-img img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block}
 tr.r-grave td{background:#ffd0d0!important}
 tr.r-leve td{background:#ffe4b8!important}
 tr.r-recom td{background:#ebebeb!important}
@@ -4942,7 +5704,7 @@ tr.r-recom td{background:#ebebeb!important}
 .dcard-body{padding:8px 10px}
 .dcard-obs{font-size:8.5px;background:var(--soft);border-left:2px solid var(--accent);padding:5px 8px;margin-bottom:7px}
 .img-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.img-cell img{width:100%;height:280px;object-fit:contain;background:#f0f0f0;display:block;border:1px solid var(--line)}
+.img-cell img{width:100%;height:200px;object-fit:contain;background:#f0f0f0;display:block;border:1px solid var(--line)}
 .sub-block{margin:8px 0 0;border:1px solid #b0c4de}
 .sub-title{background:#b0c8e8;color:var(--navy);font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:4px 10px}
 .sub-sub-block{margin:0;border-top:1px solid #c8d8eb}
@@ -4952,12 +5714,14 @@ tr.r-recom td{background:#ebebeb!important}
 .btn-p{padding:7px 28px;background:#fff;color:var(--navy);border:none;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.5px}
 .btn-c{padding:7px 20px;background:transparent;color:#fff;border:1px solid #fff;font-size:10px;cursor:pointer}
 @media print{
-  body{background:#fff}
-  .page{margin:0;box-shadow:none;width:210mm;min-height:297mm}
-  .page-cover,.page-divider{height:297mm;min-height:297mm}
+  html,body{margin:0;padding:0;background:#fff}
+  .page{width:210mm;min-height:296.6mm;box-sizing:border-box;margin:0;box-shadow:none;overflow:visible;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
+  .page:last-child{page-break-after:avoid;break-after:auto}
+  .page-cover,.page-divider,.page-back{min-height:296.6mm;overflow:hidden}
+  .page-img{height:296.6mm;min-height:0;overflow:hidden}
   .print-bar{display:none}
-  .page-break{page-break-before:always}
-  tr{page-break-inside:avoid;break-inside:avoid}
+  tr,.dcard,.dictamen,.sub-block{page-break-inside:avoid;break-inside:avoid}
+  .blk,.spec,.photos,.note,table.tbl{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
   img{image-rendering:high-quality}
   @page{size:A4;margin:0}
@@ -4978,44 +5742,55 @@ tr.r-recom td{background:#ebebeb!important}
 
             const blkH = (title) => `<div class="blk"><div class="blk-h"><span class="t">${title}</span></div>`;
 
-            const specR = (k, v) => `<div class="r"><span class="k">${k}</span><span class="v">${v||'&mdash;'}</span></div>`;
+            const specR = (k, v) => `<div class="r"><span class="k">${k}</span><span class="v">${(!v||v==='-')?'&mdash;':v}</span></div>`;
 
             const divider = (num, title, desc='') => `
 <div class="page page-divider page-break">
   <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 80px;position:relative">
-    <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);font-size:280px;font-weight:900;color:rgba(255,255,255,.05);line-height:.8;letter-spacing:-.04em;user-select:none">${String(num).padStart(2,'0')}</div>
-    <div style="font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--accent-2);margin-bottom:16px">Sección ${String(num).padStart(2,'0')}</div>
-    <div style="font-size:42px;font-weight:800;letter-spacing:-.01em;line-height:1.06;max-width:55%;color:#fff">${title}</div>
-    <div style="width:64px;height:4px;background:var(--accent);margin-top:28px;border-radius:2px"></div>
-    ${desc?`<div style="font-size:12px;color:#aab9d6;margin-top:20px;max-width:46%;line-height:1.6">${desc}</div>`:''}
+    <div style="position:absolute;right:40px;bottom:90px;font-size:300px;font-weight:900;color:#f0f2f7;line-height:.74;letter-spacing:-.04em;user-select:none">${String(num).padStart(2,'0')}</div>
+    <div style="position:relative;z-index:1">
+      <div style="font-size:12px;font-weight:700;letter-spacing:.30em;text-transform:uppercase;color:var(--accent);margin-bottom:18px">Sección ${String(num).padStart(2,'0')}</div>
+      <div style="font-size:48px;font-weight:800;letter-spacing:-.02em;line-height:1.04;max-width:62%;color:var(--navy)">${title}</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-top:30px">
+        <i style="width:70px;height:3px;background:var(--accent)"></i>
+        <span style="font-weight:700;color:var(--accent);font-size:22px;line-height:1">&#8600;</span>
+      </div>
+      ${desc?`<div style="font-size:14px;color:var(--ink-2);margin-top:24px;max-width:48%;line-height:1.65">${desc}</div>`:''}
+    </div>
   </div>
 </div>`;
 
             const valvTbl = (vv, lado) => {
                 if (!vv || !vv.items || !vv.items.length) return '';
                 const lab = lado === 'A' ? ' &mdash; Lado A' : lado === 'B' ? ' &mdash; Lado B' : '';
+                const lbl = (text) => `<span style="display:block;font-size:8px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin-bottom:1px">${text}</span>`;
                 return `${blkH('Válvulas de seguridad'+lab)}
   <table class="tbl">
-    <thead><tr>
-      <th style="width:28px">#</th>
-      <th>Marca</th><th>Nº serie</th>
-      <th class="num">Tarado</th>
-      <th>Acción</th><th>Fecha</th>
-    </tr></thead>
-    <tbody>${vv.items.map((v,vi)=>`<tr>
-      <td style="font-weight:700;text-align:center">${vi+1}</td>
-      <td class="lead">${v.marca||'—'}</td>
-      <td class="muted">${v.serieExistente||v.serieNueva||'—'}</td>
-      <td class="num">${v.presionExistente||v.presionNueva||'—'} bar</td>
-      <td>${v.indicadorDescarga||'—'}</td>
-      <td class="muted">${v.fechaVerificacion||'—'}</td>
-    </tr>`).join('')}</tbody>
+    <thead>
+      <tr>
+        <th colspan="3" style="text-align:center;border-right:2px solid var(--line-2)">Válvula existente</th>
+        <th style="text-align:center;width:12%">Acción</th>
+        <th colspan="3" style="text-align:center;border-left:2px solid var(--line-2)">Válvula nueva</th>
+      </tr>
+    </thead>
+    <tbody>${vv.items.map((v,vi)=>{
+      const accion=[v.sustitucion==='SI'?'Sustitución':'',v.verificacionDisparo==='SI'?'Retarada':'',v.inspVisual==='SI'?'Inspección visual':''].filter(Boolean).join(' · ')||'&mdash;';
+      return `<tr>
+        <td style="width:20%">${lbl('Nº Serie')}<span style="font-weight:600">${v.serieExistente||'&mdash;'}</span></td>
+        <td style="width:12%">${lbl('Fecha fab.')}<span>${v.fechaFabricacionExistente||'&mdash;'}</span></td>
+        <td style="width:10%;border-right:2px solid var(--line-2)">${lbl('P. Tarado')}<span style="font-weight:600">${v.presionExistente?v.presionExistente+' bar':'&mdash;'}</span></td>
+        <td style="text-align:center;font-weight:700;font-size:9px;color:var(--accent)">${accion}</td>
+        <td style="width:20%;border-left:2px solid var(--line-2)">${lbl('Nº Serie')}<span style="font-weight:600">${v.serieNueva||'&mdash;'}</span></td>
+        <td style="width:12%">${lbl('Fecha fab.')}<span>${v.fechaFabricacionNueva||'&mdash;'}</span></td>
+        <td style="width:10%">${lbl('P. Tarado')}<span style="font-weight:600">${v.presionNueva?v.presionNueva+' bar':'&mdash;'}</span></td>
+      </tr>`;
+    }).join('')}</tbody>
   </table></div>`;
             };
 
             // ── Equipment HTML ──
             const equipHtml = (() => {
-                const renderEquip = (eq, idx, label, tpl) => {
+                const renderEquip = (eq, idx, label, tpl, equipType='') => {
                     const valvHtml = tpl === 'plantilla2'
                         ? (valvTbl(eq.valvulasA,'A') + valvTbl(eq.valvulasB,'B'))
                         : valvTbl(eq.valvulas,'single');
@@ -5025,7 +5800,6 @@ tr.r-recom td{background:#ebebeb!important}
                         ['Modelo', eq.modelo],
                         ['Nº Serie', eq.numSerie],
                         ...(AppState.isLegalMode && eq.categoria ? [['Categoría', eq.categoria]] : []),
-                        ['Nº Placa Industria', eq.numPlaca],
                         ['Fecha Fabricación', eq.fechaFabricacion],
                         ['Normativa', eq.normativa],
                         ['Fluido Lado A', eq.fluidoA],
@@ -5042,7 +5816,6 @@ tr.r-recom td{background:#ebebeb!important}
                         ['Modelo', eq.modelo],
                         ['Nº Serie', eq.numSerie],
                         ...(AppState.isLegalMode && eq.categoria ? [['Categoría', eq.categoria]] : []),
-                        ['Nº Placa Industria', eq.numPlaca],
                         ['Fecha Fabricación', eq.fechaFabricacion],
                         ['Normativa', eq.normativa],
                         ['Fluido', eq.fluido],
@@ -5063,7 +5836,6 @@ tr.r-recom td{background:#ebebeb!important}
                         ['Modelo', eq.modelo],
                         ['Nº Serie', eq.numSerie],
                         ...(AppState.isLegalMode && eq.categoria ? [['Categoría', eq.categoria]] : []),
-                        ['Nº Placa Industria', eq.numPlaca],
                         ['Fecha Fabricación', eq.fechaFabricacion],
                         ['Normativa', eq.normativa],
                         ['Ubicación', eq.ubicacion]
@@ -5079,7 +5851,29 @@ tr.r-recom td{background:#ebebeb!important}
     </tr></thead>
     <tbody>${abFields.map(([k,a,b])=>`<tr><th>${k}</th><td>${a||'—'}</td><td>${b||'—'}</td></tr>`).join('')}</tbody>
   </table></div>` : '';
-                    const obsHtml = eq.observaciones ? `<div class="note"><b>Observaciones:</b> ${eq.observaciones}</div>` : '';
+                    const obsHtml = eq.observacionesLegal ? `<div class="note"><b>Observaciones:</b> ${eq.observacionesLegal}</div>` : '';
+                    const certBandHtml = AppState.isLegalMode ? (() => {
+                        const certItems = App._certChecklistItems(equipType, label);
+                        const rfv = eq.resultadoForzado === true ? 'favorable' : (eq.resultadoForzado || '');
+                        const rfColor = rfv === 'favorable' ? 'var(--ok)' : rfv === 'desfavorable' ? 'var(--bad)' : 'var(--ink-3)';
+                        const rfLabel = rfv === 'favorable' ? 'FAVORABLE' : rfv === 'desfavorable' ? 'DESFAVORABLE' : 'SIN RESULTADO';
+                        const cl = eq.certChecklist || [];
+                        return `<div style="margin-top:20px;border:1px solid var(--line-2);border-radius:6px;overflow:hidden">
+  <div style="background:var(--navy);color:#fff;padding:7px 14px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase">Certificación RD 552/2019</div>
+  <div style="padding:12px 14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <p style="font-size:10px;color:var(--ink-2);line-height:1.55;flex:1"><b style="color:var(--ink)">Clauger Refrigeración Ibérica S.A.</b>, empresa frigorista habilitada, certifica la revisión del aparato a presión (RD&nbsp;552/2019).</p>
+      <div style="text-align:center;flex-shrink:0">
+        <div style="font-size:8.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin-bottom:4px">Resultado</div>
+        <div style="font-size:12px;font-weight:800;color:${rfColor};letter-spacing:.03em">${rfLabel}</div>
+      </div>
+    </div>
+    ${certItems.length > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px">
+      ${certItems.map((item,i) => `<div style="display:flex;align-items:flex-start;gap:8px;font-size:9.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border:1.5px solid ${cl[i]?'var(--ok)':'var(--line-2)'};border-radius:2px;background:${cl[i]?'var(--ok)':'#fff'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${cl[i]?'<span style="color:#fff;font-size:9px;line-height:1">&#10003;</span>':''}</span><span>${item}</span></div>`).join('')}
+    </div>` : ''}
+  </div>
+</div>`;
+                    })() : '';
                     const ptsPhotos = ['placa','general'].filter(t => photos[t] && photos[t+'Incluir'] !== false);
                     const photosHtml = ptsPhotos.length ? `${blkH('Fotografías')}
   <div class="photos">${ptsPhotos.map(t=>`<div class="ph"><div class="img" style="background-image:url('${photos[t]}')"></div><div class="cap">${t==='placa'?'Placa de características':'Vista general'}</div></div>`).join('')}</div></div>` : '';
@@ -5090,7 +5884,7 @@ tr.r-recom td{background:#ebebeb!important}
   <div class="ptitle">${eq.modelo||label||'—'}</div>
   ${eq.categoria?`<span class="chip cat">${eq.categoria}</span>`:''}
 </div>
-${identHtml}${condHtml}${obsHtml}${valvHtml}${photosHtml}${extraHtml}`;
+${identHtml}${condHtml}${certBandHtml}${obsHtml}${valvHtml}${photosHtml}${extraHtml}`;
                 };
                 const pages = [];
                 Object.entries(EQUIPMENT_TYPES).forEach(([typeName, typeData]) => {
@@ -5104,29 +5898,84 @@ ${identHtml}${condHtml}${obsHtml}${valvHtml}${photosHtml}${extraHtml}`;
                                 ['Nº Serie', unit.numSerie]
                             ];
                             const compresores = (unit.subEquipments||{})['Bloque Compresor'] || [];
-                            let ucPage = `${rh('Equipos a Presión', pv('cliente')||'')}
+                            const comp0 = compresores[0];
+                            pages.push(`${rh('Equipos a Presión', pv('cliente')||'')}
 <div class="pad">
 <div class="peyebrow">Unidad Compresora &middot; N.º ${ui+1}</div>
 <div class="ptitle" style="margin-bottom:4px">${unit.modelo||'Unidad Compresora'}</div>
-${blkH('Identificación')}<div class="spec">${ucFields.map(([k,v])=>specR(k,v)).join('')}</div></div>`;
-                            compresores.forEach((comp, ci) => { ucPage += renderEquip(comp, ci, 'Bloque Compresor', 'plantilla1'); });
-                            pages.push(ucPage);
+${blkH('Identificación')}<div class="spec">${ucFields.map(([k,v])=>specR(k,v)).join('')}</div></div>
+${comp0 ? renderEquip(comp0, 0, 'Bloque Compresor', 'plantilla1', 'Unidad Compresora') : ''}`);
+                            compresores.slice(1).forEach((comp, ci) => {
+                                pages.push(`${rh('Equipos a Presión', pv('cliente')||'')}<div class="pad">${renderEquip(comp, ci + 1, 'Bloque Compresor', 'plantilla1', 'Unidad Compresora')}</div>`);
+                            });
                             Object.keys(unit.subEquipments||{}).forEach(subType => {
                                 if (subType === 'Bloque Compresor') return;
                                 const subs = unit.subEquipments[subType];
                                 if (!subs || !subs.length) return;
                                 const tpl = subType.includes('Enfriador Aceite') ? 'plantilla2' : 'plantilla1';
                                 subs.forEach((sub, si) => {
-                                    pages.push(`${rh('Equipos a Presión', pv('cliente')||'')}<div class="pad">${renderEquip(sub, si, subType, tpl)}</div>`);
+                                    pages.push(`${rh('Equipos a Presión', pv('cliente')||'')}<div class="pad">${renderEquip(sub, si, subType, tpl, 'Unidad Compresora')}</div>`);
                                 });
                             });
+                        });
+                    } else if (typeData.isSingle) {
+                        const svcItems = AppState.equipmentData[typeName] || [];
+                        if (!svcItems.length) return;
+                        svcItems.forEach((svc, si) => {
+                            const svcFields = [
+                                ['Marca', svc.marca],
+                                ['Modelo', svc.modelo],
+                                ['Nº Serie', svc.numSerie],
+                                ...(AppState.isLegalMode && svc.categoria ? [['Categoría', svc.categoria]] : []),
+                                ['Fecha Fabricación', svc.fechaFabricacion],
+                                ...(AppState.isLegalMode && svc.normativa ? [['Normativa', svc.normativa]] : []),
+                                ['Volumen (dm³)', svc.volumen],
+                                ['Presión Máx (bar)', svc.presionMax],
+                                ['Presión Mín (bar)', svc.presionMin],
+                                ['Ubicación', svc.ubicacion]
+                            ];
+                            const svcCertBand = AppState.isLegalMode ? (() => {
+                                const certItems = App._certChecklistItems('Servicios', 'Servicios');
+                                const rfv = svc.resultadoForzado === true ? 'favorable' : (svc.resultadoForzado || '');
+                                const rfColor = rfv === 'favorable' ? 'var(--ok)' : rfv === 'desfavorable' ? 'var(--bad)' : 'var(--ink-3)';
+                                const rfLabel = rfv === 'favorable' ? 'FAVORABLE' : rfv === 'desfavorable' ? 'DESFAVORABLE' : 'SIN RESULTADO';
+                                const cl = svc.certChecklist || [];
+                                return `<div style="margin-top:20px;border:1px solid var(--line-2);border-radius:6px;overflow:hidden">
+  <div style="background:var(--navy);color:#fff;padding:7px 14px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase">Certificación RD 552/2019</div>
+  <div style="padding:12px 14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <p style="font-size:10px;color:var(--ink-2);line-height:1.55;flex:1"><b style="color:var(--ink)">Clauger Refrigeración Ibérica S.A.</b>, empresa frigorista habilitada, certifica la revisión del aparato a presión (RD&nbsp;552/2019).</p>
+      <div style="text-align:center;flex-shrink:0">
+        <div style="font-size:8.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin-bottom:4px">Resultado</div>
+        <div style="font-size:12px;font-weight:800;color:${rfColor};letter-spacing:.03em">${rfLabel}</div>
+      </div>
+    </div>
+    ${certItems.length > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px">
+      ${certItems.map((item,i) => `<div style="display:flex;align-items:flex-start;gap:8px;font-size:9.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border:1.5px solid ${cl[i]?'var(--ok)':'var(--line-2)'};border-radius:2px;background:${cl[i]?'var(--ok)':'#fff'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${cl[i]?'<span style="color:#fff;font-size:9px;line-height:1">&#10003;</span>':''}</span><span>${item}</span></div>`).join('')}
+    </div>` : ''}
+  </div>
+</div>`;
+                            })() : '';
+                            const svcObs = svc.observacionesLegal ? `<div class="note"><b>Observaciones:</b> ${svc.observacionesLegal}</div>` : '';
+                            const svcValv = valvTbl(svc.valvulas, 'single');
+                            const svcPhotos = svc.photos || {};
+                            const svcPts = ['placa','general'].filter(t => svcPhotos[t] && svcPhotos[t+'Incluir'] !== false);
+                            const svcPhotosHtml = svcPts.length ? `${blkH('Fotografías')}<div class="photos">${svcPts.map(t=>`<div class="ph"><div class="img" style="background-image:url('${svcPhotos[t]}')"></div><div class="cap">${t==='placa'?'Placa de características':'Vista general'}</div></div>`).join('')}</div></div>` : '';
+                            const svcExtras = (svc.imagenes||[]).filter(i=>i.incluirEnPdf!==false);
+                            const svcExtraHtml = svcExtras.length ? `<div class="photos">${svcExtras.map(img=>`<div class="ph"><div class="img" style="background-image:url('${img.data}')"></div></div>`).join('')}</div>` : '';
+                            pages.push(`${rh('Equipos a Presión', pv('cliente')||'')}
+<div class="pad">
+<div class="peyebrow">Servicio &middot; N.º ${si+1}</div>
+<div class="ptitle" style="margin-bottom:4px">${svc.identificador || svc.modelo || 'Servicio'}</div>
+${blkH('Identificación')}<div class="spec">${svcFields.map(([k,v])=>specR(k,v)).join('')}</div></div>
+${svcCertBand}${svcObs}${svcValv}${svcPhotosHtml}${svcExtraHtml}`);
                         });
                     } else {
                         typeData.subTypes.forEach(subType => {
                             const items = AppState.equipmentData[subType] || [];
                             if (!items.length) return;
                             items.forEach((eq, ei) => {
-                                pages.push(`${rh('Equipos a Presión', pv('cliente')||'')}<div class="pad">${renderEquip(eq, ei, subType, typeData.template)}</div>`);
+                                pages.push(`${rh('Equipos a Presión', pv('cliente')||'')}<div class="pad">${renderEquip(eq, ei, subType, typeData.template, typeName)}</div>`);
                             });
                         });
                     }
@@ -5140,7 +5989,7 @@ ${blkH('Identificación')}<div class="spec">${ucFields.map(([k,v])=>specR(k,v)).
                 if (!AppState.detectorsData.length) return `<div class="page page-break">${rh('Verificación Detectores de Fugas','')}<div class="pad"><p style="color:var(--ink-3);font-style:italic;text-align:center;padding:16px 0">No hay detectores registrados.</p></div>${rf(pv('referencia'))}</div>`;
                 const opColor = (v) => v==='SI'?'var(--ok)':v==='NO'?'var(--bad)':'var(--ink-3)';
                 return AppState.detectorsData.map((det, di) => {
-                    const certPages = (detectorCertImgs[di] || []).map(img => `<div class="page page-break" style="padding:0;overflow:hidden;min-height:1123px"><img src="${img}" style="width:100%;height:100%;object-fit:contain;display:block"></div>`).join('');
+                    const certPages = (detectorCertImgs[di] || []).map(img => `<div class="page page-break page-img"><img src="${img}"></div>`).join('');
                     if (det.tipo === 'pdf') {
                         return certPages || `<div class="page page-break">${rh('Verificación Detectores de Fugas','')}<div class="pad"><p style="color:var(--ink-3);font-style:italic;text-align:center;padding:16px 0">Detector ${di+1} — sin certificados PDF adjuntos.</p></div></div>`;
                     }
@@ -5159,7 +6008,7 @@ ${blkH('Operaciones realizadas')}
   <thead><tr><th>Operación</th><th style="width:70px;text-align:center">Resultado</th></tr></thead>
   <tbody>${opFields.map(([l,v])=>`<tr><td>${l}</td><td style="text-align:center;font-weight:700;color:${opColor(v)}">${v||'—'}</td></tr>`).join('')}</tbody>
 </table></div>
-${det.observaciones?`<div class="note" style="margin:0 60px"><b>Observaciones:</b> ${det.observaciones}</div>`:''}
+${det.observacionesLegal?`<div class="note" style="margin:0 60px"><b>Observaciones:</b> ${det.observacionesLegal}</div>`:''}
 ${photosHtml}
 </div>
 ${rf(pv('referencia'))}
@@ -5179,14 +6028,14 @@ ${rf(pv('referencia'))}
 <div class="pad">
 <div class="peyebrow">Termografía &middot; ${label}${p.fecha?' &middot; '+p.fecha:''}</div>
 <p style="color:var(--ink-3);font-style:italic;padding:12px 0">Sin informes PDF adjuntos.</p>
-${p.observaciones?`<div class="note"><b>Observaciones:</b> ${p.observaciones}</div>`:''}
+${p.observacionesLegal?`<div class="note"><b>Observaciones:</b> ${p.observacionesLegal}</div>`:''}
 </div>${rf(pv('referencia'))}</div>`;
                         }
                         return informeImgs.map((img, ii) => `<div class="page page-break">
 ${ii===0?rh('Termografía', pv('cliente')||''):''}
 ${ii===0?`<div style="padding:18px 60px 0"><div class="blk-h"><span class="t">${label}${p.fecha?' &middot; '+p.fecha:''}</span></div></div>`:''}
 <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 60px"><img src="${img}" style="max-width:100%;height:auto;display:block;margin:0 auto"></div>
-${ii===0&&p.observaciones?`<div class="note" style="margin:0 60px 22px"><b>Observaciones:</b> ${p.observaciones}</div>`:''}
+${ii===0&&p.observacionesLegal?`<div class="note" style="margin:0 60px 22px"><b>Observaciones:</b> ${p.observacionesLegal}</div>`:''}
 ${rf(pv('referencia'))}
 </div>`).join('');
                     }
@@ -5218,7 +6067,7 @@ ${rh('Termografía', pv('cliente')||'')}
     ${blkH('Resultados del análisis')}<div class="spec one">${resultadoFields.map(([k,v])=>`<div class="r"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></div>
   </div>`:''}
 </div>
-${p.observaciones?`<div class="note"><b>Observaciones:</b> ${p.observaciones}</div>`:''}
+${p.observacionesLegal?`<div class="note"><b>Observaciones:</b> ${p.observacionesLegal}</div>`:''}
 ${imgSrc?`${blkH('Imagen termográfica')}<div style="text-align:center"><div style="display:inline-block;max-width:55%;border:1px solid var(--line);border-radius:5px;overflow:hidden;background:#0a0a0a"><img src="${imgSrc}" style="max-width:100%;max-height:220px;object-fit:contain;display:block"></div></div></div>`:''}
 ${(p._pcImg && res)?`${blkH('Diagrama psicrométrico')}<div style="border:1px solid var(--line);border-radius:5px;overflow:hidden"><img src="${p._pcImg}" style="width:100%;height:auto;display:block"></div>
 <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:10px;color:var(--ink-2)">
@@ -5238,52 +6087,39 @@ ${rf(pv('referencia'))}
 <div class="pad">
 ${blkH('Planificación próxima revisión obligatoria')}
 <div style="font-size:11.5px;line-height:1.75;color:var(--ink-2);white-space:pre-line">${textoRev}</div></div>
+
+${blkH('Tabla — Periodicidad de revisión según antigüedad y carga')}
+<table class="tbl" style="margin-bottom:14px">
+  <caption style="caption-side:top;font-size:9.5px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;padding-bottom:6px">Antigüedad: ${_ageYears !== null ? Math.floor(_ageYears) + ' años' : 'sin FECHA PS'} · Carga: ${_totalKg.toFixed(0)} kg · Resultado: ${periodRev}</caption>
+  <thead><tr><th>Antigüedad</th><th>Carga de refrigerante</th><th>Periodicidad</th></tr></thead>
+  <tbody>
+    <tr${(!_isAntigua&&!_isHeavy)?' style="background:#fef3cd;font-weight:700"':''}><td>Inferior a 15 años</td><td>Inferior a 3.000 kg</td><td>Cada 5 años</td></tr>
+    <tr${(!_isAntigua&&_isHeavy)?' style="background:#fef3cd;font-weight:700"':''}><td>Inferior a 15 años</td><td>Superior a 3.000 kg</td><td>Cada 5 años</td></tr>
+    <tr${(_isAntigua&&!_isHeavy)?' style="background:#fef3cd;font-weight:700"':''}><td>Superior a 15 años</td><td>Inferior a 3.000 kg</td><td>Cada 5 años</td></tr>
+    <tr${(_isAntigua&&_isHeavy)?' style="background:#fef3cd;font-weight:700"':''}><td>Superior a 15 años</td><td>Superior a 3.000 kg</td><td>Cada 2 años</td></tr>
+  </tbody>
+</table></div>
+
 ${blkH('Planificación próxima inspección obligatoria')}
+<div style="font-size:11.5px;line-height:1.75;color:var(--ink-2);white-space:pre-line">${textoInsp}</div></div>
+
+${blkH('Tabla 1 — Periodicidad según Tn eq. CO₂')}
 <table class="tbl" style="margin-bottom:14px">
   <caption style="caption-side:top;font-size:10px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;padding-bottom:8px">Tabla 1 — Periodicidad según Tn eq. CO₂</caption>
   <thead><tr><th>Tn eq. CO₂</th><th>Periodicidad</th></tr></thead>
   <tbody>
     ${[['Más de 5.000','Anual','1 año'],['Entre 5.000 y 500','Cada 2 años','2 años'],['Entre 500 y 50','Cada 5 años','5 años'],['Inferior a 50 (Nivel 2)','Cada 10 años','10 años'],['Inferior a 50 (otros)','Exentas','Exento']].map(([r,t,k])=>`<tr${periodInsp===k?' style="background:#fef3cd;font-weight:700"':''}><td>${r}</td><td>${t}</td></tr>`).join('')}
   </tbody>
-</table>
-<div style="font-size:11.5px;line-height:1.75;color:var(--ink-2);white-space:pre-line">${textoInsp}</div></div>
+</table></div>
 </div>`;
 
             // ── Full HTML ──────────────────────────────────────────────────────────
             const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>${(()=>{const _f=revision['FECHA REVISIÓN']||'';const _y=(_f.match(/\d{4}/)||[new Date().getFullYear()])[0];const _d=(certificadoIF['DICTAMEN']||'INFORME').toUpperCase().replace(/[()]/g,'').replace(/\s+/g,' ').trim();const _rawCif=(informeIF['CIF']||'').trim();const _cif=_rawCif?(/^CIF\s/i.test(_rawCif)?_rawCif:'CIF '+_rawCif):'SIN_CIF';return `${_y}_${_d}_${_cif}`;})()}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>${SHARED_CSS}</style></head><body>
 
 <!-- ══ PORTADA ══ -->
-<div class="page page-cover">
-  <div style="height:8px;background:var(--accent)"></div>
-  <div style="flex:1;display:flex;flex-direction:column;padding:56px 64px 0">
-    <img src="${LOGO_WHITE}" style="height:28px;object-fit:contain;display:block;align-self:flex-start" alt="CLAUGER">
-    <div style="margin-top:auto;padding-bottom:52px">
-      <div style="font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--accent-2);margin-bottom:18px">Informe técnico reglamentario</div>
-      <div style="font-size:42px;font-weight:800;line-height:1.08;letter-spacing:-.02em;color:#fff">${pv('titulo')}</div>
-      <div style="font-size:16px;color:#aab9d6;font-weight:500;margin-top:12px">${pv('subtitulo')}</div>
-      <div style="width:56px;height:4px;background:var(--accent);margin:28px 0;border-radius:2px"></div>
-      <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:22px 26px;max-width:360px">
-        <div style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent-2);font-weight:700;margin-bottom:12px">Datos del cliente</div>
-        ${pv('cliente')?`<div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:7px">${pv('cliente')}</div>`:''}
-        ${pv('direccion')?`<div style="font-size:12px;color:#aab9d6;margin-bottom:3px">${pv('direccion')}</div>`:''}
-        ${(pv('cp')||pv('localidad'))?`<div style="font-size:12px;color:#aab9d6;margin-bottom:3px">${[pv('cp'),pv('localidad')].filter(Boolean).join(' &mdash; ')}</div>`:''}
-        ${pv('provincia')?`<div style="font-size:12px;color:#aab9d6;margin-bottom:16px">${pv('provincia')}</div>`:''}
-        <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,.14);padding-top:14px">
-          ${pv('referencia')?`<div><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#7e8cab">Referencia</div><div style="font-size:13px;font-weight:700;color:#fff;margin-top:2px">${pv('referencia')}</div></div>`:''}
-          ${pv('anio')?`<div style="text-align:right"><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#7e8cab">Año</div><div style="font-size:22px;font-weight:900;color:#fff;line-height:1;margin-top:2px">${pv('anio')}</div></div>`:''}
-        </div>
-      </div>
-    </div>
-  </div>
-  <div style="background:var(--navy-2);padding:18px 64px;display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--accent)">
-    <span style="font-size:10px;color:#7e8cab;letter-spacing:.04em"><b style="color:#aab9d6">CLAUGER Ibérica, S.L.U.</b> &middot; Empresa Frigorista Autorizada</span>
-    <span style="font-size:9.5px;color:#64748b">Documento confidencial</span>
-  </div>
-</div>
+${this._buildPortadaHtml(pv)}
 
 <!-- ══ ÍNDICE ══ -->
 <div class="page page-break">
@@ -5292,80 +6128,57 @@ ${blkH('Planificación próxima inspección obligatoria')}
     <div class="peyebrow">Contenido</div>
     <div class="ptitle">Índice de documentos</div>
     <div class="toc">
-      <div class="grp">Documentación general</div>
-      <div class="it"><span class="n">01</span><span class="t">Acta de inspección inicial</span><span class="dots"></span><span class="pg">&mdash;</span></div>
-      <div class="grp">Equipos e instalación</div>
-      <div class="it"><span class="n">02</span><span class="t">Equipos a presión</span><span class="dots"></span><span class="pg">&mdash;</span></div>
-      <div class="it"><span class="n">03</span><span class="t">Certificados de válvulas de seguridad</span><span class="dots"></span><span class="pg">&mdash;</span></div>
-      <div class="it"><span class="n">04</span><span class="t">Certificados de detectores de fugas</span><span class="dots"></span><span class="pg">&mdash;</span></div>
-      <div class="grp">Verificaciones y planificación</div>
-      <div class="it"><span class="n">05</span><span class="t">Termografía del aislamiento</span><span class="dots"></span><span class="pg">&mdash;</span></div>
-      <div class="it"><span class="n">06</span><span class="t">Planificación de revisiones e inspecciones</span><span class="dots"></span><span class="pg">&mdash;</span></div>
+      ${(_indItems).map(item => `<div class="it"><span class="n">${String(item.num||'').padStart(2,'0')}</span><span class="t">${item.label}</span><span class="dots"></span><span class="pg">&mdash;</span></div>`).join('')}
     </div>
   </div>
   ${rf(pv('referencia'))}
 </div>
 
-<!-- ══ 1. ACTA INICIAL ══ -->
-${divider(1,'Acta Inicial','Documentación de la inspección periódica reglamentaria.')}
+${_hasSec('acta') ? `
+<!-- ══ ACTA ══ -->
+${divider(_secNum('acta'),'Acta','Documentación de la inspección periódica reglamentaria.')}
 ${actaInicialImgs.length===0
-  ? `<div class="page page-break">${rh('Acta Inicial','')}<div class="pad"><p style="color:var(--ink-3);font-style:italic;text-align:center;padding:16px 0">No se han adjuntado archivos de Acta Inicial.</p></div>${rf(pv('referencia'))}</div>`
-  : actaInicialImgs.map(img=>`<div class="page page-break" style="padding:0;overflow:hidden;min-height:1123px"><img src="${img}" style="width:100%;height:100%;object-fit:contain;display:block"></div>`).join('')
-}
+  ? `<div class="page page-break">${rh('Acta','')}<div class="pad"><p style="color:var(--ink-3);font-style:italic;text-align:center;padding:16px 0">No se han adjuntado archivos de Acta.</p></div>${rf(pv('referencia'))}</div>`
+  : actaInicialImgs.map(img=>`<div class="page page-break page-img"><img src="${img}"></div>`).join('')
+}` : ''}
 
-<!-- ══ 2. EQUIPOS ══ -->
-${divider(2,'Equipos a Presión','Identificación, condiciones de operación y válvulas de seguridad.')}
-${equipHtml}
+${_hasSec('equipos') ? `
+<!-- ══ EQUIPOS ══ -->
+${divider(_secNum('equipos'),'Equipos a Presión','Identificación, condiciones de operación y válvulas de seguridad.')}
+${equipHtml}` : ''}
 
-<!-- ══ 3. CERTIFICADOS VÁLVULAS DE SEGURIDAD ══ -->
-${divider(3,'Certificados Válvulas de Seguridad','Verificación y tarado de válvulas PSV.')}
+${_hasSec('valvulas') ? `
+<!-- ══ CERTIFICADOS VÁLVULAS DE SEGURIDAD ══ -->
+${divider(_secNum('valvulas'),'Certificados Válvulas de Seguridad','Verificación y tarado de válvulas PSV.')}
 ${certPsvImgs.length===0
   ? `<div class="page page-break">${rh('Cert. Válvulas de Seguridad','')}<div class="pad"><p style="color:var(--ink-3);font-style:italic;text-align:center;padding:16px 0">No se han adjuntado certificados PSV.</p></div>${rf(pv('referencia'))}</div>`
-  : certPsvImgs.map(img=>`<div class="page page-break" style="padding:0;overflow:hidden;min-height:1123px"><img src="${img}" style="width:100%;height:100%;object-fit:contain;display:block"></div>`).join('')
-}
+  : certPsvImgs.map(img=>`<div class="page page-break page-img"><img src="${img}"></div>`).join('')
+}` : ''}
 
-<!-- ══ 4. CERTIFICADOS DETECTORES DE FUGAS ══ -->
-${divider(4,'Detectores de Fugas','Verificación y calibración de detectores y centralitas.')}
-${detectoresHtml}
+${_hasSec('detectores') ? `
+<!-- ══ CERTIFICADOS DETECTORES DE FUGAS ══ -->
+${divider(_secNum('detectores'),'Detectores de Fugas','Verificación y calibración de detectores y centralitas.')}
+${detectoresHtml}` : ''}
 
-<!-- ══ 5. TERMOGRAFÍA ══ -->
-${divider(5,'Termografía','Análisis del aislamiento térmico mediante termografía.')}
-${termografiaHtml}
+${_hasSec('termografia') ? `
+<!-- ══ TERMOGRAFÍA ══ -->
+${divider(_secNum('termografia'),'Termografía','Análisis del aislamiento térmico mediante termografía.')}
+${termografiaHtml}` : ''}
 
-<!-- ══ 6. PLANIFICACIÓN ══ -->
-${divider(6,'Planificación','Próximas revisiones e inspecciones obligatorias.')}
+${_hasSec('planificacion') ? `
+<!-- ══ PLANIFICACIÓN ══ -->
+${divider(_secNum('planificacion'),'Planificación','Próximas revisiones e inspecciones obligatorias.')}
 <div class="page page-break">
   ${rh('Planificación', pv('cliente')||'')}
   ${planificacionHtml}
   ${rf(pv('referencia'))}
-</div>
+</div>` : ''}
 
 <!-- ══ CONTRAPORTADA ══ -->
-<div class="page page-break page-cover" style="min-height:1123px">
-  <div style="height:8px;background:var(--accent)"></div>
-  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 2.5rem 1.5rem;text-align:center;flex:1">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:48px">
-      <div style="width:40px;height:1px;background:var(--accent)"></div>
-      <div style="width:6px;height:6px;background:var(--accent);transform:rotate(45deg)"></div>
-      <div style="font-size:10px;letter-spacing:.28em;color:var(--accent-2);text-transform:uppercase;font-weight:700">Informe Técnico</div>
-      <div style="width:6px;height:6px;background:var(--accent);transform:rotate(45deg)"></div>
-      <div style="width:40px;height:1px;background:var(--accent)"></div>
-    </div>
-    <img src="${LOGO_WHITE}" style="height:56px;object-fit:contain;display:block;margin-bottom:10px" alt="CLAUGER">
-    <div style="font-size:11px;letter-spacing:.28em;color:var(--accent-2);text-transform:uppercase;margin-bottom:40px">Ibérica S.L.U.</div>
-    <div style="width:56px;height:3px;background:var(--accent);border-radius:2px;margin-bottom:4px"></div>
-    <div style="width:28px;height:2px;background:var(--accent-2);border-radius:2px;margin-bottom:36px"></div>
-    <div style="font-size:12px;line-height:2;color:#cbd5e1;white-space:pre-line;max-width:400px">${contraTexto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-    <div style="width:56px;height:2px;background:rgba(255,255,255,.12);border-radius:2px;margin-top:40px"></div>
-  </div>
-  <div style="background:var(--navy-2);padding:16px 2.5rem;display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--accent)">
-    <span style="color:var(--accent-2);font-size:9px;letter-spacing:.18em;text-transform:uppercase;font-weight:700">Empresa Frigorista Autorizada</span>
-    <span style="color:#64748b;font-size:9px;letter-spacing:.04em">www.clauger.com</span>
-  </div>
-  <div style="height:8px;background:var(--accent)"></div>
-</div>
+${this._buildContraportadaHtml(pv, contraTexto)}
 
 <div class="print-bar">
+  <span style="color:#ffdd57;font-size:9px;font-weight:600;letter-spacing:.02em">&#9888; En Destino elige &laquo;Guardar como PDF&raquo; (no &laquo;Microsoft Print to PDF&raquo;) &middot; M&aacute;rgenes: Ninguno &middot; Gr&aacute;ficos de fondo: activado</span>
   <button class="btn-p" onclick="window.print()">IMPRIMIR / GUARDAR PDF</button>
   <button class="btn-c" onclick="window.close()">CERRAR</button>
 </div>

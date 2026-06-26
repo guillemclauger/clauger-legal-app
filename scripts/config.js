@@ -66,6 +66,12 @@ const EQUIPMENT_TYPES = {
             'Condensador Adiabático'
         ]
     },
+    'Servicios': {
+        icon: '🔩',
+        template: 'servicio',
+        isSingle: true,
+        label: 'Servicio'
+    },
 };
 
 // ============================================================================
@@ -126,7 +132,8 @@ const PAGES_CONFIG = {
                 fields: [
                     {name: "SISTEMA", type: "text", placeholder: "Ej. 12345AA"},
                     {name: "CIF", type: "text", label: "CIF - Frigorífico"},
-                    {name: "NÚMERO REVISIÓN", type: "select", options: ["", "R0", "R1", "R2"]}
+                    {name: "NÚMERO REVISIÓN", type: "select", options: ["", "R0", "R1", "R2", "R3"]},
+                    {name: "IDENTIFICACIÓN SEGÚN CLIENTE", type: "text"}
                 ]
             },
             {
@@ -160,10 +167,10 @@ const PAGES_CONFIG = {
                     {name: "CLAS. LOCAL", type: "select", options: ["", "Cat. A", "Cat. B", "Cat. C", "Cat. D"]},
                     {name: "NIVEL", type: "select", options: ["", "1", "2"]},
                     {name: "POT. ABS (kW)", type: "text"},
+                    {name: "TIPO", type: "select", options: ["", "1 Etapa", "2 Etapa", "3 Etapa", "Cascada / Booster"]},
                     {name: "SISTEMA REFRIG. 1", type: "select", options: ["", "Directo", "Indirecto cerrado", "Indirecto abierto", "Doble indirecto abierto", "Indirecto cerrado ventilado", "Indirecto abierto ventilado"]},
                     {name: "SISTEMA REFRIG. 2", type: "select", options: ["", "Directo", "Indirecto cerrado", "Indirecto abierto", "Doble indirecto abierto", "Indirecto cerrado ventilado", "Indirecto abierto ventilado"]},
-                    {name: "SISTEMA REFRIG. 3", type: "select", options: ["", "Directo", "Indirecto cerrado", "Indirecto abierto", "Doble indirecto abierto", "Indirecto cerrado ventilado", "Indirecto abierto ventilado"]},
-                    {name: "TIPO", type: "select", options: ["", "1 Etapa", "2 Etapa", "3 Etapa", "Cascada / Booster"]}
+                    {name: "SISTEMA REFRIG. 3", type: "select", options: ["", "Directo", "Indirecto cerrado", "Indirecto abierto", "Doble indirecto abierto", "Indirecto cerrado ventilado", "Indirecto abierto ventilado"]}
                 ]
             },
             {
@@ -189,7 +196,7 @@ const PAGES_CONFIG = {
                 legalOnly: true,
                 fields: [
                     {name: "TIPO DE ACTA", type: "select", options: ["", "CERTIFICADO DE REVISIÓN PERIÓDICA", "INFORME TÉCNICO / LEGAL"]},
-                    {name: "NÚMERO REVISIÓN", type: "text"},
+                    {name: "NÚMERO REVISIÓN", type: "select", options: ["", "R0", "R1", "R2", "R3"]},
                     {name: "DICTAMEN", type: "select", options: ["", "Favorable (Sin defectos)", "Favorable (Defectos leves)", "Desfavorable", "Negativa", "Condicionado", "Comunicación deficiencias"]},
                     {name: "FECHA LÍMITE CORRECCIÓN", type: "text"},
                     {name: "COMENTARIOS", type: "textarea", rows: 6, readonly: true, fullWidth: true}

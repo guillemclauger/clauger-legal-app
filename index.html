@@ -81,18 +81,19 @@
                     </div>
                     <button class="header-btn" id="btnActaInicial" style="display:none">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                        Acta Inicial
+                        Acta
                     </button>
                     <button class="header-btn" id="btnInformeFinal" style="display:none;background:#1a2744;color:#fff;font-weight:700;border-color:#1a2744">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         Informe Final
                     </button>
-                    <span id="autosaveBadge" style="display:none"></span>
+                    <button class="header-btn" id="btnUndo" disabled onclick="App.undo()" title="Deshacer (Ctrl+Z)" style="font-size:1rem;padding:6px 10px">←</button>
+                    <button class="header-btn" id="btnRedo" disabled onclick="App.redo()" title="Rehacer (Ctrl+Y)" style="font-size:1rem;padding:6px 10px">→</button>
                     <button class="header-btn" id="btnLoad">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                         Cargar
                     </button>
-                    <button class="header-btn" id="btnExport">
+                    <button class="header-btn" id="btnExport" title="Exportar como nuevo archivo">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         Exportar
                     </button>
@@ -172,6 +173,25 @@
     </div>
 
     <!-- ============================================ -->
+    <!-- PHOTO SOURCE MODAL                           -->
+    <!-- ============================================ -->
+    <div id="photoSourceModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)" onclick="App._photoSourceModalClose()">
+        <div style="background:var(--surface);border-radius:1rem 1rem 0 0;padding:1.5rem;width:100%;max-width:480px;box-shadow:0 -4px 24px rgba(0,0,0,0.18)" onclick="event.stopPropagation()">
+            <div style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:0.25rem;text-align:center">Añadir foto</div>
+            <div style="font-size:0.8rem;color:var(--ink-3);text-align:center;margin-bottom:1.25rem">¿Desde dónde quieres añadir la foto?</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
+                <button onclick="App._photoSourceModalConfirmCamera()" style="display:flex;flex-direction:column;align-items:center;gap:0.5rem;background:var(--navy);color:var(--on-dark);border:none;border-radius:0.75rem;padding:1.25rem 1rem;font-size:0.875rem;font-weight:600;cursor:pointer">
+                    <span style="font-size:1.75rem">📷</span>Cámara
+                </button>
+                <button onclick="App._photoSourceModalConfirmGallery()" style="display:flex;flex-direction:column;align-items:center;gap:0.5rem;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:0.75rem;padding:1.25rem 1rem;font-size:0.875rem;font-weight:600;cursor:pointer">
+                    <span style="font-size:1.75rem">🖼️</span>Galería
+                </button>
+            </div>
+            <button onclick="App._photoSourceModalClose()" style="width:100%;background:transparent;color:var(--ink-3);border:1px solid var(--line);border-radius:0.75rem;padding:0.75rem;font-size:0.875rem;font-weight:600;cursor:pointer">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
     <!-- JAVASCRIPT - ORDEN CORRECTO                  -->
     <!-- ============================================ -->
     <script async src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -180,6 +200,8 @@
     <script src="scripts/utils.js"></script>
     <script src="scripts/auth.js"></script>
     <script src="scripts/app.js"></script>
+    <script src="scripts/ayudante.js"></script>
+    <script src="scripts/tutorial.js"></script>
 
     <!-- ============================================ -->
     <!-- SISTEMA DE INICIALIZACIÓN Y NAVEGACIÓN      -->
@@ -223,16 +245,19 @@
                 // Inicializar la aplicación con app.js
                 if (typeof App !== 'undefined' && App.init) {
                     App.init();
+                    if (typeof Ayudante !== 'undefined') Ayudante.init();
                     // Restaurar sesión guardada si existe
                     const _snap = App._getAutosave();
+                    const _startTutorial = () => { if (typeof Tutorial !== 'undefined') Tutorial.askAndStart(); };
                     if (_snap && !_snap.isLegalMode) {
                         const _d = new Date(_snap.ts);
                         const _when = _d.toLocaleDateString('es-ES') + ' a las ' + _d.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
-                        if (confirm('📂 Sesión guardada encontrada\n\nFecha: ' + _when + '\n\n¿Restaurar la sesión anterior?\n\n(Cancelar para empezar sesión nueva)')) {
-                            App._applyAutosave(_snap);
-                        } else {
-                            App._clearAutosave();
-                        }
+                        App._showRestoreDialog(_snap, _when,
+                            () => { App._applyAutosave(_snap); _startTutorial(); },
+                            () => { App._clearAutosave(); App.renderSidebar(); App.renderWorkspace(); _startTutorial(); }
+                        );
+                    } else {
+                        _startTutorial();
                     }
                     // Autoguardado cada 2 minutos + aviso si recarga accidental
                     setInterval(() => App._doAutosave(), 2 * 60 * 1000);
@@ -274,16 +299,16 @@
                     // Inicializar la aplicación con app.js
                     if (typeof App !== 'undefined' && App.init) {
                         App.init();
+                        if (typeof Ayudante !== 'undefined') Ayudante.init();
                         // Restaurar sesión guardada si existe
                         const _snap = App._getAutosave();
                         if (_snap && _snap.isLegalMode) {
                             const _d = new Date(_snap.ts);
                             const _when = _d.toLocaleDateString('es-ES') + ' a las ' + _d.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
-                            if (confirm('📂 Sesión guardada encontrada\n\nFecha: ' + _when + '\n\n¿Restaurar la sesión anterior?\n\n(Cancelar para empezar sesión nueva)')) {
-                                App._applyAutosave(_snap);
-                            } else {
-                                App._clearAutosave();
-                            }
+                            App._showRestoreDialog(_snap, _when,
+                                () => App._applyAutosave(_snap),
+                                () => { App._clearAutosave(); App.renderSidebar(); App.renderWorkspace(); }
+                            );
                         }
                         // Autoguardado cada 2 minutos + aviso si recarga accidental
                         setInterval(() => App._doAutosave(), 2 * 60 * 1000);

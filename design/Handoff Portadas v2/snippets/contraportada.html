@@ -1,0 +1,25 @@
+<!-- ══ CONTRAPORTADA ══  (reemplaza el bloque actual; nota la clase page-back) -->
+<div class="page page-back">
+  <div style="display:flex;height:5px"><i style="width:120px;background:var(--rouge)"></i><i style="flex:1;background:var(--accent)"></i></div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 60px;text-align:center">
+    <img src="${LOGO_MACARON}" style="width:78px;object-fit:contain;display:block;margin-bottom:30px" alt="CLAUGER">
+    <div style="font-size:24px;font-weight:700;color:var(--navy);line-height:1.3;max-width:440px;letter-spacing:-.02em;white-space:pre-line">${contraTexto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+    <div style="width:60px;height:3px;background:var(--accent);margin:34px auto"></div>
+    <div style="display:flex;gap:64px;justify-content:center;text-align:left">
+      <div>
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:10px">Contacto</div>
+        <div style="font-size:13px;color:var(--ink-2);line-height:1.7"><b style="color:var(--navy)">CLAUGER Refrigeración Iberia S.A.</b><br>Empresa Frigorista Autorizada<br>www.clauger.com</div>
+      </div>
+      ${pv('referencia')?`<div>
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:10px">Documento</div>
+        <div style="font-size:13px;color:var(--ink-2);line-height:1.7">Ref. <b style="color:var(--navy)">${pv('referencia')}</b>${pv('anio')?`<br>Emitido en ${pv('anio')}`:''}<br>Confidencial — uso del cliente</div>
+      </div>`:''}
+    </div>
+  </div>
+  <div style="padding:22px 60px 40px">
+    <div style="border-top:1px solid var(--line);padding-top:16px;display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);letter-spacing:.04em">
+      <span><b style="color:var(--ink-2)">CLAUGER Refrigeración Iberia S.A.</b></span>
+      <span>www.clauger.com &middot; Documento confidencial</span>
+    </div>
+  </div>
+</div>
