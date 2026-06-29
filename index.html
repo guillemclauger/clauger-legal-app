@@ -199,6 +199,7 @@
     <script src="scripts/state.js"></script>
     <script src="scripts/utils.js"></script>
     <script src="scripts/auth.js"></script>
+    <script src="scripts/db.js"></script>
     <script src="scripts/app.js"></script>
     <script src="scripts/ayudante.js"></script>
     <script src="scripts/tutorial.js"></script>
@@ -220,47 +221,59 @@
          */
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🚀 Sistema CLAUGER iniciado');
-            
+
+            // Iniciar IndexedDB en background — no bloquea el registro de listeners
+            ClaugerDB.open().then(() => ClaugerDB.persist()).catch(e =>
+                console.warn('IndexedDB no disponible, sin persistencia IDB:', e)
+            );
+
             // ========================================
             // CONFIGURAR BOTONES DE LOGIN
             // ========================================
-            
-            document.getElementById('btnLoginTecnico').addEventListener('click', function() {
+
+            document.getElementById('btnLoginTecnico').addEventListener('click', async function() {
                 console.log('🔧 Login Técnico');
-                
+
                 // ESTABLECER MODO TÉCNICO
                 if (typeof AppState !== 'undefined') {
                     AppState.isLegalMode = false;
                 }
-                
+
                 // Ocultar login, mostrar app
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('app').classList.add('show');
                 document.getElementById('modeIndicator').textContent = 'Acceso Técnicos';
-                
+
                 // Ocultar elementos legales
                 document.getElementById('legalBadge').style.display = 'none';
                 document.getElementById('btnActaInicial').style.display = 'none';
-                
+
                 // Inicializar la aplicación con app.js
                 if (typeof App !== 'undefined' && App.init) {
                     App.init();
                     if (typeof Ayudante !== 'undefined') Ayudante.init();
-                    // Restaurar sesión guardada si existe
-                    const _snap = App._getAutosave();
+
+                    // Cargar borrador desde IDB; migrar desde localStorage si no hay nada en IDB
+                    let _snap = await App._loadDraft();
+                    if (!_snap) {
+                        const _lsRaw = localStorage.getItem('clauger_autosave');
+                        if (_lsRaw) {
+                            try { _snap = JSON.parse(_lsRaw); } catch(e) { _snap = null; }
+                            if (_snap) localStorage.removeItem('clauger_autosave');
+                        }
+                    }
+
                     const _startTutorial = () => { if (typeof Tutorial !== 'undefined') Tutorial.askAndStart(); };
                     if (_snap && !_snap.isLegalMode) {
                         const _d = new Date(_snap.ts);
                         const _when = _d.toLocaleDateString('es-ES') + ' a las ' + _d.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
                         App._showRestoreDialog(_snap, _when,
-                            () => { App._applyAutosave(_snap); _startTutorial(); },
-                            () => { App._clearAutosave(); App.renderSidebar(); App.renderWorkspace(); _startTutorial(); }
+                            async () => { await App._applyAutosave(_snap); _startTutorial(); },
+                            async () => { await App._clearAutosave(); App.renderSidebar(); App.renderWorkspace(); _startTutorial(); }
                         );
                     } else {
                         _startTutorial();
                     }
-                    // Autoguardado cada 2 minutos + aviso si recarga accidental
-                    setInterval(() => App._doAutosave(), 2 * 60 * 1000);
                     window.addEventListener('beforeunload', (e) => {
                         App._doAutosave();
                         if (!window._intentionalReload) { e.preventDefault(); e.returnValue = ''; }
@@ -269,49 +282,56 @@
 
                 console.log('✅ Modo Técnico activado - isLegalMode:', AppState.isLegalMode);
             });
-            
+
             document.getElementById('btnShowPassword').addEventListener('click', function() {
                 console.log('🔑 Mostrar formulario password');
                 document.getElementById('loginOptions').style.display = 'none';
                 document.getElementById('passwordForm').classList.add('show');
                 document.getElementById('passwordInput').focus();
             });
-            
-            document.getElementById('btnLoginLegal').addEventListener('click', function() {
+
+            document.getElementById('btnLoginLegal').addEventListener('click', async function() {
                 console.log('⚖️ Login Legal');
                 const password = document.getElementById('passwordInput').value;
-                
+
                 if (password === '1234') {
                     // ESTABLECER MODO LEGAL
                     if (typeof AppState !== 'undefined') {
                         AppState.isLegalMode = true;
                     }
-                    
+
                     // Ocultar login, mostrar app
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.getElementById('app').classList.add('show');
                     document.getElementById('modeIndicator').textContent = 'Departamento Legal';
-                    
+
                     // Mostrar elementos legales
                     document.getElementById('legalBadge').style.display = 'block';
                     document.getElementById('btnActaInicial').style.display = 'block';
-                    
+
                     // Inicializar la aplicación con app.js
                     if (typeof App !== 'undefined' && App.init) {
                         App.init();
                         if (typeof Ayudante !== 'undefined') Ayudante.init();
-                        // Restaurar sesión guardada si existe
-                        const _snap = App._getAutosave();
+
+                        // Cargar borrador desde IDB; migrar desde localStorage si no hay nada en IDB
+                        let _snap = await App._loadDraft();
+                        if (!_snap) {
+                            const _lsRaw = localStorage.getItem('clauger_autosave');
+                            if (_lsRaw) {
+                                try { _snap = JSON.parse(_lsRaw); } catch(e) { _snap = null; }
+                                if (_snap) localStorage.removeItem('clauger_autosave');
+                            }
+                        }
+
                         if (_snap && _snap.isLegalMode) {
                             const _d = new Date(_snap.ts);
                             const _when = _d.toLocaleDateString('es-ES') + ' a las ' + _d.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
                             App._showRestoreDialog(_snap, _when,
-                                () => App._applyAutosave(_snap),
-                                () => { App._clearAutosave(); App.renderSidebar(); App.renderWorkspace(); }
+                                async () => { await App._applyAutosave(_snap); },
+                                async () => { await App._clearAutosave(); App.renderSidebar(); App.renderWorkspace(); }
                             );
                         }
-                        // Autoguardado cada 2 minutos + aviso si recarga accidental
-                        setInterval(() => App._doAutosave(), 2 * 60 * 1000);
                         window.addEventListener('beforeunload', (e) => {
                             App._doAutosave();
                             if (!window._intentionalReload) { e.preventDefault(); e.returnValue = ''; }
@@ -324,7 +344,7 @@
                     document.getElementById('passwordError').classList.add('show');
                     document.getElementById('passwordInput').value = '';
                     document.getElementById('passwordInput').focus();
-                    
+
                     setTimeout(() => {
                         document.getElementById('passwordError').classList.remove('show');
                     }, 3000);

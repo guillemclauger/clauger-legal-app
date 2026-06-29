@@ -8,11 +8,12 @@ const Ayudante = (() => {
   let _infoPanel  = null;
   let _infoBtn    = null;
 
-  // ─── Imágenes PSV ─────────────────────────────────────────────────────────
-  const PSV_IMGS = [
-    { src: 'imagenes/ayuda-psv/PSV AWP.jpg',          label: 'AWP' },
-    { src: 'imagenes/ayuda-psv/PSV CAEN.jpg',         label: 'CAEN' },
-    { src: 'imagenes/ayuda-psv/PSV HERL PARKER.jpg',  label: 'HERL PARKER' },
+  // ─── PDFs de referencia PSV ────────────────────────────────────────────────
+  const PSV_PDFS = [
+    { label: 'AWP',     src: 'imagenes/ayuda-psv/Infografias PSV_AWP.pdf' },
+    { label: 'CASTEL',  src: 'imagenes/ayuda-psv/Infografias PSV_CASTEL.pdf' },
+    { label: 'Danfoss', src: 'imagenes/ayuda-psv/Infografias PSV_Danfoss.pdf' },
+    { label: 'Herl',    src: 'imagenes/ayuda-psv/Infografias PSV_Herl.pdf' },
   ];
 
   // Textos hint para imágenes obligatorias específicas
@@ -39,10 +40,12 @@ const Ayudante = (() => {
     ['clauger_ayudante_pref', 'clauger_ayudante_step',
      'clauger_ayudante_neg',  'clauger_ayudante_b02'].forEach(k => localStorage.removeItem(k));
 
-    if (typeof AppState === 'undefined' || AppState.isLegalMode) return;
-    _createTutBtn();
     _createInfoBtn();
     _createInfoPanel();
+
+    // Botón de tutorial solo en modo técnico
+    if (typeof AppState === 'undefined' || AppState.isLegalMode) return;
+    _createTutBtn();
   }
 
   // ─── Botón "▶" para relanzar el tutorial temporizado ────────────────────
@@ -73,18 +76,19 @@ const Ayudante = (() => {
       'background:rgba(0,0,0,.55);align-items:center;justify-content:center',
     ].join(';');
     _psvPopover.innerHTML = `
-      <div style="background:#fff;border-radius:var(--r-lg);padding:1.5rem;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.22);position:relative">
+      <div style="background:#fff;border-radius:var(--r-lg);padding:1.25rem 1.5rem 1.5rem;width:min(94vw,860px);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.28);position:relative">
         <button onclick="Ayudante.closePsvPopover()" style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--ink-3);line-height:1">×</button>
-        <div style="font-family:var(--display);font-weight:700;font-size:.95rem;margin-bottom:1rem;color:var(--ink)">Referencia Válvulas de Seguridad (PSV)</div>
-        <div style="display:flex;gap:1.25rem;flex-wrap:wrap;justify-content:center">
-          ${PSV_IMGS.map(img => `
-            <div style="text-align:center">
-              <img src="${img.src}" alt="${img.label}"
-                style="height:200px;width:auto;max-width:240px;border-radius:var(--r-md);object-fit:contain;border:1px solid var(--line-2);cursor:pointer"
-                onclick="App.viewImage(this.src)">
-              <div style="font-size:.78rem;color:var(--ink-2);margin-top:.4rem;font-weight:600">${img.label}</div>
-            </div>`).join('')}
+        <div style="font-family:var(--display);font-weight:700;font-size:.95rem;margin-bottom:.85rem;color:var(--ink)">Referencia Válvulas de Seguridad (PSV)</div>
+        <div style="display:flex;gap:.4rem;margin-bottom:.75rem;flex-wrap:wrap">
+          ${PSV_PDFS.map((p, i) => `
+            <button class="ay-psv-tab${i === 0 ? ' ay-psv-tab--on' : ''}"
+                    onclick="Ayudante._psvTab('${p.src}',this)">
+              ${p.label}
+            </button>`).join('')}
         </div>
+        <iframe id="ay-psv-frame" src="${PSV_PDFS[0].src}"
+          style="flex:1;min-height:60vh;border:1px solid var(--line-2);border-radius:var(--r-md)">
+        </iframe>
       </div>`;
     _psvPopover.addEventListener('click', (e) => {
       if (e.target === _psvPopover) closePsvPopover();
@@ -96,13 +100,27 @@ const Ayudante = (() => {
   }
 
   function openPsvPopover() {
-    if (!_psvPopover) return;
+    _injectStyles();
+    if (!_psvPopover || !document.body.contains(_psvPopover)) _createPsvPopover();
+    // Resetear siempre a la primera pestaña al abrir
+    const frame = document.getElementById('ay-psv-frame');
+    if (frame && PSV_PDFS[0]) frame.src = PSV_PDFS[0].src;
+    document.querySelectorAll('.ay-psv-tab').forEach((b, i) => {
+      b.classList.toggle('ay-psv-tab--on', i === 0);
+    });
     _psvPopover.style.display = 'flex';
   }
 
   function closePsvPopover() {
     if (!_psvPopover) return;
     _psvPopover.style.display = 'none';
+  }
+
+  function _psvTab(src, btn) {
+    const frame = document.getElementById('ay-psv-frame');
+    if (frame) frame.src = src;
+    document.querySelectorAll('.ay-psv-tab').forEach(b => b.classList.remove('ay-psv-tab--on'));
+    btn.classList.add('ay-psv-tab--on');
   }
 
   function psvInfoIconHtml() {
@@ -182,6 +200,28 @@ const Ayudante = (() => {
     const s = document.createElement('style');
     s.id = 'ay-styles';
     s.textContent = `
+      .ay-psv-tab {
+        padding: .3rem .85rem;
+        border: 1px solid var(--line-2);
+        border-radius: var(--r-md);
+        background: var(--surface-2, #f5f7fa);
+        color: var(--ink-2);
+        font-family: var(--body);
+        font-size: .8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background .15s, color .15s, border-color .15s;
+      }
+      .ay-psv-tab:hover {
+        background: var(--accent-light, #e8eef8);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .ay-psv-tab--on {
+        background: var(--accent) !important;
+        color: #fff !important;
+        border-color: var(--accent) !important;
+      }
       .ay-psv-icon {
         background: none;
         border: 1px solid var(--line-2);
@@ -217,5 +257,6 @@ const Ayudante = (() => {
     onChecklistNegativo,
     getImgHint,
     _closeInfoPanel,
+    _psvTab,
   };
 })();

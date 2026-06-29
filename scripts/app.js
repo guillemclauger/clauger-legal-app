@@ -146,18 +146,28 @@ const App = {
         ov.querySelector('#_dlgNew').onclick    = () => { document.body.removeChild(ov); onNew(); };
     },
 
-    // ── Autosave ──────────────────────────────────────────────────────────────
+    // ── Autosave (IndexedDB) ──────────────────────────────────────────────────
     _badgeFadeTimer: null,
+    _autosaveTimer:  null,
+    _isFlushing:     false,
+    _idbPhotoMap:    new Map(), // blobUrl → idbId
 
+    // Llamado en cada cambio: guarda historial sync y planifica flush async
     _doAutosave() {
         this._saveHistory();
+        clearTimeout(this._autosaveTimer);
+        this._autosaveTimer = setTimeout(() => this._flushAutosave(), 800);
+    },
+
+    async _flushAutosave() {
+        if (this._isFlushing) {
+            // Ya hay un flush en curso; reencolar para cuando termine
+            this._autosaveTimer = setTimeout(() => this._flushAutosave(), 800);
+            return;
+        }
+        this._isFlushing = true;
         try {
-            const termografiaExport = (AppState.termografiaData || []).map(t => {
-                const copy = Object.assign({}, t);
-                delete copy._pcImg; // derived, can be regenerated
-                return copy;
-            });
-            const snap = {
+            const raw = {
                 ts: Date.now(),
                 isLegalMode: AppState.isLegalMode,
                 sectionsData: AppState.sectionsData,
@@ -172,15 +182,23 @@ const App = {
                 contraportadaData: AppState.contraportadaData || { texto: '' },
                 certPsvArchivos: AppState.certPsvArchivos || [],
                 actaInicialArchivos: AppState.actaInicialArchivos || [],
-                termografiaData: termografiaExport,
+                // Excluir campos derivados/transitorios de termografía
+                termografiaData: (AppState.termografiaData || []).map(t => {
+                    const copy = Object.assign({}, t);
+                    delete copy._pcImg; delete copy._processedImg;
+                    delete copy._testoPoints; delete copy._testoTamb;
+                    return copy;
+                }),
                 planificacionData: AppState.planificacionData || { textoRevision: '', textoInspeccion: '' },
             };
-            localStorage.setItem('clauger_autosave', JSON.stringify(snap));
+            const snap = await this._serializePhotos(raw);
+            await ClaugerDB.saveState(snap);
             this._updateAutosaveBadge();
         } catch(e) {
-            if (e.name === 'QuotaExceededError') {
-                console.warn('Autosave: almacenamiento lleno, no se pudo guardar');
-            }
+            console.error('Autosave IDB falló:', e);
+            this.showToast('⚠️ No se pudo guardar la sesión automáticamente', 'error');
+        } finally {
+            this._isFlushing = false;
         }
     },
 
@@ -188,47 +206,211 @@ const App = {
         // Badge oculto visualmente, autoguardado sigue funcionando
     },
 
-    _getAutosave() {
+    async _loadDraft() {
+        try { return await ClaugerDB.loadState(); }
+        catch(e) { console.error('Error leyendo borrador IDB:', e); return null; }
+    },
+
+    async _clearAutosave() {
+        // Revocar todos los object URLs activos
+        this._idbPhotoMap.forEach((id, url) => URL.revokeObjectURL(url));
+        this._idbPhotoMap.clear();
+        try { await ClaugerDB.clearAll(); } catch(e) { console.error('Error limpiando IDB:', e); }
+    },
+
+    async _applyAutosave(snap) {
         try {
-            const raw = localStorage.getItem('clauger_autosave');
-            return raw ? JSON.parse(raw) : null;
-        } catch { return null; }
-    },
-
-    _clearAutosave() {
-        localStorage.removeItem('clauger_autosave');
-    },
-
-    _applyAutosave(snap) {
-        AppState.sectionsData       = snap.sectionsData || {};
-        // Sync SISTEMA y CIF entre modo técnico y legal al cargar
-        {
-            const _inf  = AppState.sectionsData['datos_datos_informe']     || {};
-            const _inst = AppState.sectionsData['datos_datos_instalacion'] || {};
-            if (_inf['SISTEMA'] && !_inst['SISTEMA']) _inst['SISTEMA'] = _inf['SISTEMA'];
-            if (_inst['SISTEMA'] && !_inf['SISTEMA']) _inf['SISTEMA'] = _inst['SISTEMA'];
-            if (_inf['CIF'] && !_inst['CIF']) _inst['CIF'] = _inf['CIF'];
-            if (_inst['CIF'] && !_inf['CIF']) _inf['CIF'] = _inst['CIF'];
-            if (!AppState.sectionsData['datos_datos_informe']) AppState.sectionsData['datos_datos_informe'] = _inf;
-            if (!AppState.sectionsData['datos_datos_instalacion']) AppState.sectionsData['datos_datos_instalacion'] = _inst;
+            const restored = await this._deserializePhotos(snap);
+            AppState.sectionsData = restored.sectionsData || {};
+            // Sync SISTEMA y CIF entre modo técnico y legal al cargar
+            {
+                const _inf  = AppState.sectionsData['datos_datos_informe']     || {};
+                const _inst = AppState.sectionsData['datos_datos_instalacion'] || {};
+                if (_inf['SISTEMA'] && !_inst['SISTEMA']) _inst['SISTEMA'] = _inf['SISTEMA'];
+                if (_inst['SISTEMA'] && !_inf['SISTEMA']) _inf['SISTEMA'] = _inst['SISTEMA'];
+                if (_inf['CIF'] && !_inst['CIF']) _inst['CIF'] = _inf['CIF'];
+                if (_inst['CIF'] && !_inf['CIF']) _inf['CIF'] = _inst['CIF'];
+                if (!AppState.sectionsData['datos_datos_informe']) AppState.sectionsData['datos_datos_informe'] = _inf;
+                if (!AppState.sectionsData['datos_datos_instalacion']) AppState.sectionsData['datos_datos_instalacion'] = _inst;
+            }
+            AppState.equipmentData      = restored.equipmentData || {};
+            AppState.detectorsData      = restored.detectorsData || [];
+            AppState.instalacionCircuitos = restored.instalacionCircuitos || AppState.instalacionCircuitos;
+            AppState.instalacionSalas   = restored.instalacionSalas || [];
+            AppState.instalacionCamaras = restored.instalacionCamaras || AppState.instalacionCamaras;
+            AppState.serviciosData      = restored.serviciosData || [];
+            AppState.portadaData        = restored.portadaData || {};
+            AppState.indiceData         = restored.indiceData || { items: [] };
+            AppState.contraportadaData  = restored.contraportadaData || { texto: '' };
+            AppState.certPsvArchivos    = restored.certPsvArchivos || [];
+            AppState.actaInicialArchivos = restored.actaInicialArchivos || [];
+            AppState.termografiaData    = restored.termografiaData || [];
+            AppState.planificacionData  = restored.planificacionData || { textoRevision: '', textoInspeccion: '' };
+            this._rebuildTermoCache();
+            this.renderSidebar();
+            this.renderWorkspace();
+            this.showToast('Sesión restaurada', 'success');
+        } catch(e) {
+            console.error('Error restaurando sesión:', e);
+            this.showToast('No se pudo restaurar la sesión', 'error');
         }
-        AppState.equipmentData      = snap.equipmentData || {};
-        AppState.detectorsData      = snap.detectorsData || [];
-        AppState.instalacionCircuitos = snap.instalacionCircuitos || AppState.instalacionCircuitos;
-        AppState.instalacionSalas   = snap.instalacionSalas || [];
-        AppState.instalacionCamaras = snap.instalacionCamaras || AppState.instalacionCamaras;
-        AppState.serviciosData      = snap.serviciosData || [];
-        AppState.portadaData        = snap.portadaData || {};
-        AppState.indiceData         = snap.indiceData || { items: [] };
-        AppState.contraportadaData  = snap.contraportadaData || { texto: '' };
-        AppState.certPsvArchivos    = snap.certPsvArchivos || [];
-        AppState.actaInicialArchivos = snap.actaInicialArchivos || [];
-        AppState.termografiaData    = snap.termografiaData || [];
-        AppState.planificacionData  = snap.planificacionData || { textoRevision: '', textoInspeccion: '' };
-        this.renderSidebar();
-        this.renderWorkspace();
-        this.showToast('Sesión restaurada', 'success');
     },
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // ── Utilidades de fotos / IDB ─────────────────────────────────────────────
+
+    _genPhotoId() {
+        return 'ph_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+    },
+
+    _dataUrlToBlob(dataUrl) {
+        const [header, b64] = dataUrl.split(',');
+        const mime = (header.match(/:(.*?);/) || [])[1] || 'application/octet-stream';
+        const bin  = atob(b64);
+        const arr  = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return new Blob([arr], { type: mime });
+    },
+
+    _blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload  = () => resolve(fr.result);
+            fr.onerror = reject;
+            fr.readAsDataURL(blob);
+        });
+    },
+
+    // Convierte data: URLs en AppState → Blob en IDB + object URL (en memoria)
+    // Campos que empiezan por "_" se dejan tal cual (son derivados/transitorios)
+    async _normalizePhotos(obj) {
+        if (typeof obj === 'string') {
+            if (obj.startsWith('data:') && obj.length > 500) {
+                const id   = this._genPhotoId();
+                const blob = this._dataUrlToBlob(obj);
+                await ClaugerDB.savePhoto(id, blob);
+                const url  = URL.createObjectURL(blob);
+                this._idbPhotoMap.set(url, id);
+                return url;
+            }
+            if (obj.startsWith('blob:') && this._idbPhotoMap.has(obj)) return obj;
+            return obj;
+        }
+        if (Array.isArray(obj)) return Promise.all(obj.map(i => this._normalizePhotos(i)));
+        if (obj !== null && typeof obj === 'object') {
+            const result = {};
+            for (const [k, v] of Object.entries(obj)) {
+                result[k] = k.startsWith('_') ? v : await this._normalizePhotos(v);
+            }
+            return result;
+        }
+        return obj;
+    },
+
+    // Para el snapshot de autosave: blob: URL → {__idbRef: id}; data: URL → nuevo blob en IDB
+    async _serializePhotos(obj) {
+        if (typeof obj === 'string') {
+            if (obj.startsWith('blob:')) {
+                const id = this._idbPhotoMap.get(obj);
+                return id ? { __idbRef: id } : null;
+            }
+            if (obj.startsWith('data:') && obj.length > 500) {
+                // dato base64 que aún no ha sido normalizado (caso raro)
+                const id   = this._genPhotoId();
+                await ClaugerDB.savePhoto(id, this._dataUrlToBlob(obj));
+                return { __idbRef: id };
+            }
+            return obj;
+        }
+        if (Array.isArray(obj)) return Promise.all(obj.map(i => this._serializePhotos(i)));
+        if (obj !== null && typeof obj === 'object') {
+            const result = {};
+            for (const [k, v] of Object.entries(obj)) {
+                result[k] = await this._serializePhotos(v);
+            }
+            return result;
+        }
+        return obj;
+    },
+
+    // Restaurar snapshot: {__idbRef: id} → cargar blob de IDB → object URL
+    async _deserializePhotos(obj) {
+        if (obj !== null && typeof obj === 'object' && obj.__idbRef) {
+            const blob = await ClaugerDB.loadPhoto(obj.__idbRef);
+            if (!blob) return null;
+            const url = URL.createObjectURL(blob);
+            this._idbPhotoMap.set(url, obj.__idbRef);
+            return url;
+        }
+        if (Array.isArray(obj)) return Promise.all(obj.map(i => this._deserializePhotos(i)));
+        if (obj !== null && typeof obj === 'object') {
+            const result = {};
+            for (const [k, v] of Object.entries(obj)) {
+                result[k] = await this._deserializePhotos(v);
+            }
+            return result;
+        }
+        return obj;
+    },
+
+    // Para exportar a JSON: blob: URL → base64; data: URL → se deja tal cual
+    async _resolveForExport(obj) {
+        if (typeof obj === 'string') {
+            if (obj.startsWith('blob:')) {
+                const id = this._idbPhotoMap.get(obj);
+                if (id) {
+                    const blob = await ClaugerDB.loadPhoto(id);
+                    if (blob) return this._blobToDataUrl(blob);
+                }
+                return null;
+            }
+            return obj;
+        }
+        if (Array.isArray(obj)) return Promise.all(obj.map(i => this._resolveForExport(i)));
+        if (obj !== null && typeof obj === 'object') {
+            const result = {};
+            for (const [k, v] of Object.entries(obj)) {
+                result[k] = await this._resolveForExport(v);
+            }
+            return result;
+        }
+        return obj;
+    },
+
+    // Revoca un object URL y elimina el blob de IDB
+    _revokeAndDeletePhoto(url) {
+        if (!url || !url.startsWith('blob:')) return;
+        URL.revokeObjectURL(url);
+        const id = this._idbPhotoMap.get(url);
+        if (id) {
+            this._idbPhotoMap.delete(url);
+            ClaugerDB.deletePhoto(id).catch(() => {});
+        }
+    },
+
+    // Reconstruye _termoImgCache desde termografiaData (funciona con base64 y blob: URLs)
+    _rebuildTermoCache() {
+        this._termoImgCache = {};
+        (AppState.termografiaData || []).forEach((punto, idx) => {
+            const src = punto.imagen;
+            if (!src) return;
+            const img = new Image();
+            img.onload = () => {
+                const oc = document.createElement('canvas');
+                oc.width = img.naturalWidth; oc.height = img.naturalHeight;
+                oc.getContext('2d').drawImage(img, 0, 0);
+                this._termoImgCache[idx] = oc.getContext('2d').getImageData(0, 0, oc.width, oc.height);
+            };
+            img.src = src;
+        });
+    },
+
+    // Versión async de _buildExportData: resuelve blob: URLs → base64
+    async _buildExportDataAsync() {
+        const data = this._buildExportData();
+        return this._resolveForExport(data);
+    },
+
     // ─────────────────────────────────────────────────────────────────────────
 
     _renderFieldInput(f, data) {
@@ -430,7 +612,7 @@ const App = {
                             <span class="awp-icon-label">Tipo de conexión entrada</span>
                         </button>
                         <div class="awp-picker" id="awp-picker-ent-${uid}">
-                            ${['AWP 1','AWP 2','AWP 3'].map(opt => `
+                            ${['AWP 1','AWP 2','AWP 3','AWP 4'].map(opt => `
                                 <div class="awp-opt${tipoConexionEntrada===opt?' awp-opt--sel':''}" data-val="${opt}" onclick="${setTcEntFn(opt)}">
                                     <img src="imagenes/${opt}.png"><span>${opt}</span>
                                 </div>
@@ -446,7 +628,7 @@ const App = {
                             <span class="awp-icon-label">Tipo de conexión salida</span>
                         </button>
                         <div class="awp-picker" id="awp-picker-sal-${uid}">
-                            ${['AWP 1','AWP 2','AWP 3'].map(opt => `
+                            ${['AWP 1','AWP 2','AWP 3','AWP 4'].map(opt => `
                                 <div class="awp-opt${tipoConexionSalida===opt?' awp-opt--sel':''}" data-val="${opt}" onclick="${setTcSalFn(opt)}">
                                     <img src="imagenes/${opt}.png"><span>${opt}</span>
                                 </div>
@@ -527,21 +709,19 @@ const App = {
         `;
     },
 
-    _readMultipleImages(files, pushFn, rerenderFn) {
+    async _readMultipleImages(files, pushFn, rerenderFn) {
         const imgFiles = files.filter(f => f.type.startsWith('image/'));
         if (!imgFiles.length) { this.showToast('Solo se admiten imágenes', 'error'); return; }
-        let done = 0;
-        imgFiles.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = ev => {
-                pushFn({name: file.name, data: ev.target.result, timestamp: new Date().toISOString(), incluirEnPdf: true});
-                if (++done === imgFiles.length) {
-                    rerenderFn();
-                    this.showToast(`${imgFiles.length} imagen${imgFiles.length>1?'es':''} añadida${imgFiles.length>1?'s':''}`, 'success');
-                }
-            };
-            reader.readAsDataURL(file);
-        });
+        await Promise.all(imgFiles.map(async file => {
+            const id  = this._genPhotoId();
+            await ClaugerDB.savePhoto(id, file);
+            const url = URL.createObjectURL(file);
+            this._idbPhotoMap.set(url, id);
+            pushFn({ name: file.name, data: url, timestamp: new Date().toISOString(), incluirEnPdf: true });
+        }));
+        rerenderFn();
+        this.showToast(`${imgFiles.length} imagen${imgFiles.length>1?'es':''} añadida${imgFiles.length>1?'s':''}`, 'success');
+        this._doAutosave();
     },
 
     _pickImages(onFiles, capture) {
@@ -655,22 +835,22 @@ const App = {
             input.type = 'file';
             input.accept = 'image/*';
             if (capture) input.capture = 'environment';
-            input.onchange = (e) => {
+            input.onchange = async (e) => {
                 const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        if (!equipment.photos) equipment.photos = {};
-                        equipment.photos[photoType] = event.target.result;
-                        isSubEquip ? this.renderCompositeUnitsList() : this.renderEquipmentList();
-                        this.showToast('Foto añadida', 'success');
-                        this._doAutosave();
-                    };
-                    reader.readAsDataURL(file);
-                }
+                if (!file) return;
+                const id  = this._genPhotoId();
+                await ClaugerDB.savePhoto(id, file);
+                const url = URL.createObjectURL(file);
+                this._idbPhotoMap.set(url, id);
+                if (!equipment.photos) equipment.photos = {};
+                equipment.photos[photoType] = url;
+                isSubEquip ? this.renderCompositeUnitsList() : this.renderEquipmentList();
+                this.showToast('Foto añadida', 'success');
+                this._doAutosave();
             };
             input.click();
         } else if (action === 'remove') {
+            this._revokeAndDeletePhoto(equipment.photos[photoType]);
             equipment.photos[photoType] = null;
             isSubEquip ? this.renderCompositeUnitsList() : this.renderEquipmentList();
             this.showToast('Foto eliminada', 'success');
@@ -684,23 +864,33 @@ const App = {
     uploadPhotoSub(equipKey, index, subType, subIdx, photoType) { this.managePhoto('upload', equipKey, index, photoType, subType, subIdx); },
     uploadPhotoSubCam(equipKey, index, subType, subIdx, photoType) { this.managePhoto('upload', equipKey, index, photoType, subType, subIdx, true); },
     removePhotoSub(equipKey, index, subType, subIdx, photoType) { this.managePhoto('remove', equipKey, index, photoType, subType, subIdx); },
-    dropPhotoSlot(event, equipKey, index, photoType) {
+    async dropPhotoSlot(event, equipKey, index, photoType) {
         event.preventDefault();
         const file = [...(event.dataTransfer?.files || [])].find(f => f.type.startsWith('image/'));
         if (!file) return;
+        const id  = this._genPhotoId();
+        await ClaugerDB.savePhoto(id, file);
+        const url = URL.createObjectURL(file);
+        this._idbPhotoMap.set(url, id);
         const eq = AppState.equipmentData[equipKey][index];
-        const reader = new FileReader();
-        reader.onload = e => { if (!eq.photos) eq.photos = {}; eq.photos[photoType] = e.target.result; this.renderEquipmentList(); this._doAutosave(); };
-        reader.readAsDataURL(file);
+        if (!eq.photos) eq.photos = {};
+        eq.photos[photoType] = url;
+        this.renderEquipmentList();
+        this._doAutosave();
     },
-    dropPhotoSlotSub(event, equipKey, index, subType, subIdx, photoType) {
+    async dropPhotoSlotSub(event, equipKey, index, subType, subIdx, photoType) {
         event.preventDefault();
         const file = [...(event.dataTransfer?.files || [])].find(f => f.type.startsWith('image/'));
         if (!file) return;
+        const id  = this._genPhotoId();
+        await ClaugerDB.savePhoto(id, file);
+        const url = URL.createObjectURL(file);
+        this._idbPhotoMap.set(url, id);
         const sub = AppState.equipmentData[equipKey][index].subEquipments[subType][subIdx];
-        const reader = new FileReader();
-        reader.onload = e => { if (!sub.photos) sub.photos = {}; sub.photos[photoType] = e.target.result; this.renderCompositeUnitsList(); this._doAutosave(); };
-        reader.readAsDataURL(file);
+        if (!sub.photos) sub.photos = {};
+        sub.photos[photoType] = url;
+        this.renderCompositeUnitsList();
+        this._doAutosave();
     },
     uploadEquipImagesCam(equipKey, index) {
         this._pickImages(files => {
@@ -1486,28 +1676,31 @@ const App = {
         input.type = 'file';
         input.accept = 'image/*';
         input.capture = 'environment';
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
             const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const detector = AppState.detectorsData[detectorIndex];
-                    if (!detector.imagenes) detector.imagenes = [];
-                    detector.imagenes.push({name: file.name, data: event.target.result, timestamp: new Date().toISOString()});
-                    this.renderDetectorForm();
-                    this.showToast('Imagen añadida', 'success');
-                };
-                reader.readAsDataURL(file);
-            }
+            if (!file) return;
+            const id  = this._genPhotoId();
+            await ClaugerDB.savePhoto(id, file);
+            const url = URL.createObjectURL(file);
+            this._idbPhotoMap.set(url, id);
+            const detector = AppState.detectorsData[detectorIndex];
+            if (!detector.imagenes) detector.imagenes = [];
+            detector.imagenes.push({ name: file.name, data: url, timestamp: new Date().toISOString() });
+            this.renderDetectorForm();
+            this.showToast('Imagen añadida', 'success');
+            this._doAutosave();
         };
         input.click();
     },
 
     removeDetectorImage(detectorIndex, imageIndex) {
         if (confirm('¿Eliminar esta imagen?')) {
+            const img = AppState.detectorsData[detectorIndex].imagenes[imageIndex];
+            if (img) this._revokeAndDeletePhoto(img.data);
             AppState.detectorsData[detectorIndex].imagenes.splice(imageIndex, 1);
             this.renderDetectorForm();
             this.showToast('Imagen eliminada', 'success');
+            this._doAutosave();
         }
     },
 
@@ -1534,34 +1727,36 @@ const App = {
     uploadDetectorCert(idx) {
         const input = document.createElement('input');
         input.type = 'file'; input.accept = 'application/pdf'; input.multiple = true;
-        input.onchange = e => {
-            Array.from(e.target.files).forEach(file => {
-                const reader = new FileReader();
-                reader.onload = ev => {
-                    if (!AppState.detectorsData[idx].certArchivos) AppState.detectorsData[idx].certArchivos = [];
-                    AppState.detectorsData[idx].certArchivos.push({name: file.name, data: ev.target.result, size: file.size, timestamp: new Date().toISOString()});
-                    this.renderDetectorForm();
-                    this.showToast('Certificado adjuntado', 'success');
-                };
-                reader.readAsDataURL(file);
-            });
+        input.onchange = async e => {
+            if (!AppState.detectorsData[idx].certArchivos) AppState.detectorsData[idx].certArchivos = [];
+            await Promise.all(Array.from(e.target.files).map(async file => {
+                const id  = this._genPhotoId();
+                await ClaugerDB.savePhoto(id, file);
+                const url = URL.createObjectURL(file);
+                this._idbPhotoMap.set(url, id);
+                AppState.detectorsData[idx].certArchivos.push({ name: file.name, data: url, size: file.size, timestamp: new Date().toISOString() });
+            }));
+            this.renderDetectorForm();
+            this.showToast('Certificado adjuntado', 'success');
+            this._doAutosave();
         };
         input.click();
     },
 
-    dropDetectorCert(event, idx) {
+    async dropDetectorCert(event, idx) {
         const files = Array.from(event.dataTransfer.files).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
         if (!files.length) { this.showToast('Solo se admiten archivos PDF', 'error'); return; }
         if (!AppState.detectorsData[idx].certArchivos) AppState.detectorsData[idx].certArchivos = [];
-        files.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = ev => {
-                AppState.detectorsData[idx].certArchivos.push({name: file.name, data: ev.target.result, size: file.size, timestamp: new Date().toISOString()});
-                this.renderDetectorForm();
-                this.showToast('Certificado adjuntado', 'success');
-            };
-            reader.readAsDataURL(file);
-        });
+        await Promise.all(files.map(async file => {
+            const id  = this._genPhotoId();
+            await ClaugerDB.savePhoto(id, file);
+            const url = URL.createObjectURL(file);
+            this._idbPhotoMap.set(url, id);
+            AppState.detectorsData[idx].certArchivos.push({ name: file.name, data: url, size: file.size, timestamp: new Date().toISOString() });
+        }));
+        this.renderDetectorForm();
+        this.showToast('Certificado adjuntado', 'success');
+        this._doAutosave();
     },
 
     viewDetectorCert(idx, certIdx) {
@@ -2174,33 +2369,35 @@ const App = {
         input.type = 'file';
         input.accept = 'image/*';
         input.capture = 'environment';
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
             const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const itemData = AppState.sectionsData[sectionId][itemId];
-                    if (!itemData.imagenes) itemData.imagenes = [];
-                    itemData.imagenes.push({name: file.name, data: event.target.result, timestamp: new Date().toISOString(), incluirEnPdf: true});
-                    
-                    const [pageKey, ...sectionParts] = sectionId.split('_');
-                    const section = PAGES_CONFIG[pageKey].sections.find(s => s.id === sectionParts.join('_'));
-                    this.renderChecklistSection(section);
-                    this.showToast('Imagen añadida', 'success');
-                };
-                reader.readAsDataURL(file);
-            }
+            if (!file) return;
+            const id  = this._genPhotoId();
+            await ClaugerDB.savePhoto(id, file);
+            const url = URL.createObjectURL(file);
+            this._idbPhotoMap.set(url, id);
+            const itemData = AppState.sectionsData[sectionId][itemId];
+            if (!itemData.imagenes) itemData.imagenes = [];
+            itemData.imagenes.push({ name: file.name, data: url, timestamp: new Date().toISOString(), incluirEnPdf: true });
+            const [pageKey, ...sectionParts] = sectionId.split('_');
+            const section = PAGES_CONFIG[pageKey].sections.find(s => s.id === sectionParts.join('_'));
+            this.renderChecklistSection(section);
+            this.showToast('Imagen añadida', 'success');
+            this._doAutosave();
         };
         input.click();
     },
 
     removeChecklistImage(sectionId, itemId, imageIndex) {
         if (confirm('¿Eliminar esta imagen?')) {
+            const img = AppState.sectionsData[sectionId][itemId].imagenes[imageIndex];
+            if (img) this._revokeAndDeletePhoto(img.data);
             AppState.sectionsData[sectionId][itemId].imagenes.splice(imageIndex, 1);
             const [pageKey, ...sectionParts] = sectionId.split('_');
             const section = PAGES_CONFIG[pageKey].sections.find(s => s.id === sectionParts.join('_'));
             this.renderChecklistSection(section);
             this.showToast('Imagen eliminada', 'success');
+            this._doAutosave();
         }
     },
 
@@ -2698,14 +2895,15 @@ www.clauger.com`;
         });
     },
 
-    _storePdf(file, storeKey, renderFn) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            AppState[storeKey].push({ name: file.name, data: e.target.result, size: file.size, timestamp: new Date().toISOString() });
-            renderFn();
-            this.showToast(`${file.name} adjuntado`, 'success');
-        };
-        reader.readAsDataURL(file);
+    async _storePdf(file, storeKey, renderFn) {
+        const id  = this._genPhotoId();
+        await ClaugerDB.savePhoto(id, file);
+        const url = URL.createObjectURL(file);
+        this._idbPhotoMap.set(url, id);
+        AppState[storeKey].push({ name: file.name, data: url, size: file.size, timestamp: new Date().toISOString() });
+        renderFn();
+        this.showToast(`${file.name} adjuntado`, 'success');
+        this._doAutosave();
     },
 
     _downloadPdf(data, name) {
@@ -2792,9 +2990,11 @@ www.clauger.com`;
 
     removeCertPsv(idx) {
         if (confirm('¿Eliminar este archivo?')) {
+            this._revokeAndDeletePhoto(AppState.certPsvArchivos[idx]?.data);
             AppState.certPsvArchivos.splice(idx, 1);
             this.renderCertPsv();
             this.showToast('Archivo eliminado', 'success');
+            this._doAutosave();
         }
     },
 
@@ -2831,9 +3031,11 @@ www.clauger.com`;
 
     removeActaInicial(idx) {
         if (confirm('¿Eliminar este archivo?')) {
+            this._revokeAndDeletePhoto(AppState.actaInicialArchivos[idx]?.data);
             AppState.actaInicialArchivos.splice(idx, 1);
             this.renderActaInicial();
             this.showToast('Archivo eliminado', 'success');
+            this._doAutosave();
         }
     },
 
@@ -3169,6 +3371,12 @@ www.clauger.com`;
 
     removeTermografia(idx) {
         if (confirm('¿Eliminar este punto de termografía?')) {
+            // Revocar imagen principal y archivos de informe adjuntos
+            const punto = AppState.termografiaData[idx];
+            if (punto) {
+                this._revokeAndDeletePhoto(punto.imagen);
+                (punto.informeArchivos || []).forEach(f => this._revokeAndDeletePhoto(f.data));
+            }
             delete this._termoImgCache[idx];
             AppState.termografiaData.splice(idx, 1);
             // Rebuild cache keys
@@ -3204,36 +3412,42 @@ www.clauger.com`;
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                AppState.termografiaData[idx].imagen = ev.target.result;
-                AppState.termografiaData[idx].imagenNombre = file.name;
-                AppState.termografiaData[idx]._processedImg = null;
-                // Load image into cache
-                const img = new Image();
-                img.onload = () => {
-                    const oc = document.createElement('canvas');
-                    oc.width = img.naturalWidth; oc.height = img.naturalHeight;
-                    oc.getContext('2d').drawImage(img, 0, 0);
-                    this._termoImgCache[idx] = oc.getContext('2d').getImageData(0, 0, oc.width, oc.height);
-                    this.renderTermografia();
-                };
-                img.src = ev.target.result;
+            // Revocar imagen anterior si la hay
+            this._revokeAndDeletePhoto(AppState.termografiaData[idx].imagen);
+            // Guardar blob en IDB y crear object URL
+            const id  = this._genPhotoId();
+            await ClaugerDB.savePhoto(id, file);
+            const url = URL.createObjectURL(file);
+            this._idbPhotoMap.set(url, id);
+            AppState.termografiaData[idx].imagen       = url;
+            AppState.termografiaData[idx].imagenNombre = file.name;
+            AppState.termografiaData[idx]._processedImg = null;
+            // Cargar imagen en caché para procesado
+            const img = new Image();
+            img.onload = () => {
+                const oc = document.createElement('canvas');
+                oc.width = img.naturalWidth; oc.height = img.naturalHeight;
+                oc.getContext('2d').drawImage(img, 0, 0);
+                this._termoImgCache[idx] = oc.getContext('2d').getImageData(0, 0, oc.width, oc.height);
+                this.renderTermografia();
             };
-            reader.readAsDataURL(file);
+            img.src = url;
+            this._doAutosave();
         };
         input.click();
     },
 
     removeTermografiaImagen(idx) {
-        AppState.termografiaData[idx].imagen = null;
+        this._revokeAndDeletePhoto(AppState.termografiaData[idx].imagen);
+        AppState.termografiaData[idx].imagen       = null;
         AppState.termografiaData[idx].imagenNombre = '';
         AppState.termografiaData[idx]._processedImg = null;
         delete this._termoImgCache[idx];
         this.renderTermografia();
+        this._doAutosave();
     },
 
     toggleTermografiaImgPdf(idx) {
@@ -3329,22 +3543,23 @@ www.clauger.com`;
         this._readTermografiaInformeFiles(files, idx);
     },
 
-    _readTermografiaInformeFiles(files, idx) {
+    async _readTermografiaInformeFiles(files, idx) {
         if (!files.length) return;
         if (!AppState.termografiaData[idx].informeArchivos) AppState.termografiaData[idx].informeArchivos = [];
-        let pending = files.length;
-        files.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = ev => {
-                AppState.termografiaData[idx].informeArchivos.push({ name: file.name, data: ev.target.result, size: file.size });
-                pending--;
-                if (pending === 0) { this.renderTermografiaInforme(idx); this._doAutosave(); }
-            };
-            reader.readAsDataURL(file);
-        });
+        await Promise.all(files.map(async file => {
+            const id  = this._genPhotoId();
+            await ClaugerDB.savePhoto(id, file);
+            const url = URL.createObjectURL(file);
+            this._idbPhotoMap.set(url, id);
+            AppState.termografiaData[idx].informeArchivos.push({ name: file.name, data: url, size: file.size });
+        }));
+        this.renderTermografiaInforme(idx);
+        this._doAutosave();
     },
 
     removeTermografiaInforme(idx, fi) {
+        const archivo = AppState.termografiaData[idx].informeArchivos[fi];
+        if (archivo) this._revokeAndDeletePhoto(archivo.data);
         AppState.termografiaData[idx].informeArchivos.splice(fi, 1);
         this.renderTermografiaInforme(idx);
         this._doAutosave();
@@ -4577,9 +4792,10 @@ www.clauger.com`;
         typeData?.isComposite ? this.renderCompositeUnitsList() : this.renderEquipmentList();
     },
 
-    exportJSON() {
+    async exportJSON() {
         this._captureActiveFields();
-        const blob = new Blob([JSON.stringify(this._buildExportData(), null, 2)], { type: 'application/json' });
+        const data = await this._buildExportDataAsync();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = this._buildFilename();
@@ -4624,20 +4840,27 @@ www.clauger.com`;
 
     // Genera el nombre de fichero según modo y datos del informe
     _buildFilename() {
+        const _c = s => (s || '').trim().replace(/[/\\:*?"<>|]/g, '').replace(/\s+/g, '_') || null;
+        const ano = new Date().getFullYear();
+
         if (AppState.isLegalMode) {
-            const _inst = AppState.sectionsData['datos_datos_instalacion'] || {};
-            const _rev  = AppState.sectionsData['datos_datos_revision'] || {};
-            const _cert = AppState.sectionsData['datos_datos_certificado'] || {};
-            const _fRev = _rev['FECHA REVISIÓN'] || '';
-            const _ano  = (_fRev.match(/\d{4}/) || [new Date().getFullYear()])[0];
-            const _sis  = (_inst['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
-            const _nRev = (_cert['NÚMERO REVISIÓN'] || '').trim().replace(/\s+/g, '_') || 'SIN_REV';
-            return `${_ano}_${_sis}_${_nRev}.json`;
+            const inst = AppState.sectionsData['datos_datos_instalacion'] || {};
+            const cli  = AppState.sectionsData['datos_datos_cliente']     || {};
+            const cert = AppState.sectionsData['datos_datos_certificado'] || {};
+            const sis     = _c(inst['SISTEMA'])         || 'SIN_SISTEMA';
+            const cliente = _c(cli['CLIENTE'])           || 'SIN_CLIENTE';
+            const ref     = _c(inst['REF. TITULAR'])     || 'SIN_REF';
+            const nRev    = _c(cert['NÚMERO REVISIÓN'])  || 'SIN_REV';
+            return `${ano}_${sis}_${cliente}_${ref}_${nRev}.json`;
         }
+
         const informe = AppState.sectionsData['datos_datos_informe'] || {};
-        const sistema = (informe['SISTEMA'] || '').trim().replace(/\s+/g, '_') || 'SIN_SISTEMA';
-        const numRev  = (informe['NÚMERO REVISIÓN'] || '').trim().replace(/\s+/g, '_') || 'SIN_REV';
-        return `${new Date().getFullYear()}_${sistema}_${numRev}.json`;
+        const cli     = AppState.sectionsData['datos_datos_cliente'] || {};
+        const sis     = _c(informe['SISTEMA'])                         || 'SIN_SISTEMA';
+        const cliente = _c(cli['CLIENTE'])                             || 'SIN_CLIENTE';
+        const idCli   = _c(informe['IDENTIFICACIÓN SEGÚN CLIENTE'])    || 'SIN_ID';
+        const nRev    = _c(informe['NÚMERO REVISIÓN'])                 || 'SIN_REV';
+        return `${ano}_${sis}_${cliente}_${idCli}_${nRev}.json`;
     },
 
     loadJSON() {
@@ -4648,7 +4871,7 @@ www.clauger.com`;
                 try {
                     const file = await handle.getFile();
                     const data = JSON.parse(await file.text());
-                    if (this._applyLoadedData(data)) {
+                    if (await this._applyLoadedData(data)) {
                         _fileHandle = handle;
                         this._updateSaveBtn();
                     }
@@ -4656,27 +4879,24 @@ www.clauger.com`;
             }).catch(err => { if (err.name !== 'AbortError') this.showToast('Error al cargar', 'error'); });
             return;
         }
-        // Fallback para navegadores sin File System Access API
+        // Fallback para navegadores sin File System Access API (Firefox, Android)
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.json';
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
             const file = e.target.files[0];
             if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        this._applyLoadedData(JSON.parse(event.target.result));
-                    } catch { this.showToast('Error al cargar', 'error'); }
-                };
-                reader.readAsText(file);
+                try {
+                    const text = await file.text();
+                    await this._applyLoadedData(JSON.parse(text));
+                } catch { this.showToast('Error al cargar', 'error'); }
             }
         };
         input.click();
     },
 
     // Aplica los datos cargados al AppState y re-renderiza. Devuelve false si el usuario cancela.
-    _applyLoadedData(data) {
+    async _applyLoadedData(data) {
         if (data.isLegalMode && !AppState.isLegalMode) {
             if (!confirm('Este archivo fue creado en Modo Legal. Algunas secciones no estarán disponibles en Modo Técnico. ¿Desea continuar?')) return false;
         }
@@ -4727,19 +4947,17 @@ www.clauger.com`;
         AppState.actaInicialArchivos  = data.actaInicialArchivos  || [];
         AppState.termografiaData      = data.termografiaData      || [];
         AppState.planificacionData    = data.planificacionData    || { textoRevision: '', textoInspeccion: '' };
-        this._termoImgCache = {};
-        AppState.termografiaData.forEach((punto, idx) => {
-            if (punto.imagen) {
-                const img = new Image();
-                img.onload = () => {
-                    const oc = document.createElement('canvas');
-                    oc.width = img.naturalWidth; oc.height = img.naturalHeight;
-                    oc.getContext('2d').drawImage(img, 0, 0);
-                    this._termoImgCache[idx] = oc.getContext('2d').getImageData(0, 0, oc.width, oc.height);
-                };
-                img.src = punto.imagen;
-            }
-        });
+
+        // Normalizar fotos: convertir base64 → Blob en IDB + object URL en memoria
+        // (los campos que empiezan por "_" se saltan — son derivados y no hay que persistirlos)
+        AppState.sectionsData        = await this._normalizePhotos(AppState.sectionsData);
+        AppState.equipmentData       = await this._normalizePhotos(AppState.equipmentData);
+        AppState.detectorsData       = await this._normalizePhotos(AppState.detectorsData);
+        AppState.certPsvArchivos     = await this._normalizePhotos(AppState.certPsvArchivos);
+        AppState.actaInicialArchivos = await this._normalizePhotos(AppState.actaInicialArchivos);
+        AppState.termografiaData     = await this._normalizePhotos(AppState.termografiaData);
+
+        this._rebuildTermoCache();
         this.calcularDatosRevision();
         this.renderSidebar();
         this.renderWorkspace();
@@ -4752,8 +4970,8 @@ www.clauger.com`;
     async saveJSON() {
         this._captureActiveFields();
         if (!('showSaveFilePicker' in window)) {
-            // Navegador sin soporte (Firefox): descarga normal
-            this.exportJSON();
+            // Navegador sin soporte (Firefox/Android): descarga normal
+            await this.exportJSON();
             return;
         }
         try {
@@ -4764,7 +4982,8 @@ www.clauger.com`;
                 });
                 this._updateSaveBtn();
             }
-            const blob = new Blob([JSON.stringify(this._buildExportData(), null, 2)], { type: 'application/json' });
+            const exportData = await this._buildExportDataAsync();
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
             const writable = await _fileHandle.createWritable();
             await writable.write(blob);
             await writable.close();

@@ -1,5 +1,5 @@
-const CACHE = 'clauger-v10';
-const VERSION = '26_01';
+const CACHE = 'clauger-v11';
+const VERSION = '26_02';
 
 // Archivos solo para fallback offline
 const OFFLINE_FILES = [
@@ -10,6 +10,7 @@ const OFFLINE_FILES = [
   './scripts/state.js',
   './scripts/utils.js',
   './scripts/auth.js',
+  './scripts/db.js',
   './scripts/app.js',
   './scripts/ayudante.js',
   './scripts/tutorial.js',
