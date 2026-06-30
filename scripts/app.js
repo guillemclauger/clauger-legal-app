@@ -3961,11 +3961,11 @@ www.clauger.com`;
                                 }).join('')}
                             </div>
                         </div>
-                        ${Object.keys(unit.subEquipments || {}).map(subType => 
+                        ${typeData.subTypes.map(subType =>
                             unit.subEquipments[subType]?.length > 0 ? `
                                 <div class="form-section">
                                     <div class="form-section-title">${ic('package')} ${subType}</div>
-                                    ${unit.subEquipments[subType].map((subEquip, subIdx) => 
+                                    ${unit.subEquipments[subType].map((subEquip, subIdx) =>
                                         this.renderSubEquipmentForm(subEquip, equipKey, index, subType, subIdx)
                                     ).join('')}
                                 </div>
@@ -6127,7 +6127,7 @@ ${comp0 ? renderEquip(comp0, 0, 'Bloque Compresor', 'plantilla1', 'Unidad Compre
                             compresores.slice(1).forEach((comp, ci) => {
                                 pages.push(`${rh('Equipos a Presión', pv('cliente')||'')}<div class="pad">${renderEquip(comp, ci + 1, 'Bloque Compresor', 'plantilla1', 'Unidad Compresora')}</div>`);
                             });
-                            Object.keys(unit.subEquipments||{}).forEach(subType => {
+                            typeData.subTypes.forEach(subType => {
                                 if (subType === 'Bloque Compresor') return;
                                 const subs = unit.subEquipments[subType];
                                 if (!subs || !subs.length) return;

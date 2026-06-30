@@ -15,7 +15,7 @@ const CONFIG = {
     APP_NAME: 'CLAUGER',
     VERSION: '1.1',
     APP_VERSION: '26_01',
-    LEGAL_PASSWORD: '1234'
+    LEGAL_PASSWORD: 'G2031D'
 };
 
 // ============================================================================
@@ -23,7 +23,7 @@ const CONFIG = {
 // ============================================================================
 const EQUIPMENT_TYPES = {
     'Unidad Compresora': {
-        icon: '🔧',
+        icon: '<img src="imagenes/Unidad compresora.png" alt="Unidad Compresora" style="width:1.5em;height:1.5em;object-fit:contain;vertical-align:-.3em;mix-blend-mode:multiply">',
         template: 'unidad_compresora',
         isComposite: true,
         subTypes: [
@@ -38,7 +38,7 @@ const EQUIPMENT_TYPES = {
         ]
     },
     'Recipiente': {
-        icon: '🛢️',
+        icon: '<img src="imagenes/Recipiente.png" alt="Recipiente" style="width:1.5em;height:1.5em;object-fit:contain;vertical-align:-.3em;mix-blend-mode:multiply">',
         template: 'plantilla1',
         subTypes: [
             'Recipiente de Líquido',
@@ -50,7 +50,7 @@ const EQUIPMENT_TYPES = {
         ]
     },
     'Intercambiador': {
-        icon: '🔄',
+        icon: '<img src="imagenes/Intercambiador.png" alt="Intercambiador" style="width:1.5em;height:1.5em;object-fit:contain;vertical-align:-.3em;mix-blend-mode:multiply">',
         template: 'plantilla2',
         subTypes: [
             'Int. Placas',
@@ -58,7 +58,7 @@ const EQUIPMENT_TYPES = {
         ]
     },
     'Condensador': {
-        icon: '❄️',
+        icon: '<img src="imagenes/Condensador.png" alt="Condensador" style="width:1.5em;height:1.5em;object-fit:contain;vertical-align:-.3em;mix-blend-mode:multiply">',
         template: 'plantilla1',
         subTypes: [
             'Condensador Evaporativo',
@@ -67,7 +67,7 @@ const EQUIPMENT_TYPES = {
         ]
     },
     'Servicios': {
-        icon: '🔩',
+        icon: '<img src="imagenes/servicios.png" alt="Servicios" style="width:1.5em;height:1.5em;object-fit:contain;vertical-align:-.3em;mix-blend-mode:multiply">',
         template: 'servicio',
         isSingle: true,
         label: 'Servicio'

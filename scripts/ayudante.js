@@ -7,6 +7,7 @@ const Ayudante = (() => {
   let _psvPopover = null;
   let _infoPanel  = null;
   let _infoBtn    = null;
+  let _pdfLoadingController = null;
 
   // ─── PDFs de referencia PSV ────────────────────────────────────────────────
   const PSV_PDFS = [
@@ -35,6 +36,14 @@ const Ayudante = (() => {
   function init() {
     _injectStyles();
     _createPsvPopover();
+
+    // Cierra el visor PSV con el gesto/botón atrás de Android
+    window.addEventListener('popstate', () => {
+      if (_psvPopover && _psvPopover.style.display !== 'none') {
+        _psvPopover.style.display = 'none';
+        if (_pdfLoadingController) { _pdfLoadingController.abort(); _pdfLoadingController = null; }
+      }
+    });
 
     // Limpiar claves del tour antiguo para que no persistan
     ['clauger_ayudante_pref', 'clauger_ayudante_step',
@@ -73,22 +82,29 @@ const Ayudante = (() => {
     _psvPopover.id = 'ay-psv-popover';
     _psvPopover.style.cssText = [
       'display:none;position:fixed;inset:0;z-index:10010',
-      'background:rgba(0,0,0,.55);align-items:center;justify-content:center',
+      'background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:.5rem',
     ].join(';');
     _psvPopover.innerHTML = `
-      <div style="background:#fff;border-radius:var(--r-lg);padding:1.25rem 1.5rem 1.5rem;width:min(94vw,860px);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.28);position:relative">
-        <button onclick="Ayudante.closePsvPopover()" style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--ink-3);line-height:1">×</button>
-        <div style="font-family:var(--display);font-weight:700;font-size:.95rem;margin-bottom:.85rem;color:var(--ink)">Referencia Válvulas de Seguridad (PSV)</div>
-        <div style="display:flex;gap:.4rem;margin-bottom:.75rem;flex-wrap:wrap">
-          ${PSV_PDFS.map((p, i) => `
-            <button class="ay-psv-tab${i === 0 ? ' ay-psv-tab--on' : ''}"
-                    onclick="Ayudante._psvTab('${p.src}',this)">
-              ${p.label}
-            </button>`).join('')}
+      <div id="ay-psv-modal" style="background:#fff;border-radius:var(--r-lg);width:min(98vw,880px);max-height:96vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.28);overflow:hidden">
+        <div id="ay-psv-header" style="background:#fff;border-bottom:1px solid var(--line-2);padding:.75rem 1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;flex-shrink:0">
+          <div style="font-family:var(--display);font-weight:700;font-size:.9rem;color:var(--ink);flex:1;min-width:0">Referencia Válvulas de Seguridad (PSV)</div>
+          <button onclick="Ayudante.closePsvPopover()"
+                  style="min-width:48px;min-height:48px;padding:0 1.1rem;background:var(--ink,#1a2233);color:#fff;border:none;border-radius:var(--r-md);font-size:.9rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem;flex-shrink:0">
+            ✕ Cerrar
+          </button>
+          <div style="width:100%;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+            ${PSV_PDFS.map((p, i) => `
+              <button class="ay-psv-tab${i === 0 ? ' ay-psv-tab--on' : ''}"
+                      onclick="Ayudante._psvTab(${i})">${p.label}</button>`).join('')}
+            <a id="ay-psv-external" href="${PSV_PDFS[0].src}" target="_blank" rel="noopener"
+               style="margin-left:auto;font-size:.78rem;color:var(--accent);text-decoration:none;padding:.35rem .7rem;border:1px solid var(--accent);border-radius:var(--r-md);white-space:nowrap;display:inline-flex;align-items:center;gap:.25rem">
+              ↗ Abrir / Descargar
+            </a>
+          </div>
         </div>
-        <iframe id="ay-psv-frame" src="${PSV_PDFS[0].src}"
-          style="flex:1;min-height:60vh;border:1px solid var(--line-2);border-radius:var(--r-md)">
-        </iframe>
+        <div id="ay-psv-canvas-wrap" style="flex:1;overflow-y:auto;padding:.75rem;background:#f0f2f5;-webkit-overflow-scrolling:touch">
+          <div id="ay-psv-canvas-container"></div>
+        </div>
       </div>`;
     _psvPopover.addEventListener('click', (e) => {
       if (e.target === _psvPopover) closePsvPopover();
@@ -102,25 +118,82 @@ const Ayudante = (() => {
   function openPsvPopover() {
     _injectStyles();
     if (!_psvPopover || !document.body.contains(_psvPopover)) _createPsvPopover();
-    // Resetear siempre a la primera pestaña al abrir
-    const frame = document.getElementById('ay-psv-frame');
-    if (frame && PSV_PDFS[0]) frame.src = PSV_PDFS[0].src;
-    document.querySelectorAll('.ay-psv-tab').forEach((b, i) => {
-      b.classList.toggle('ay-psv-tab--on', i === 0);
-    });
     _psvPopover.style.display = 'flex';
+    history.pushState({ psvModal: true }, '');
+    _psvTab(0);
   }
 
   function closePsvPopover() {
-    if (!_psvPopover) return;
+    if (!_psvPopover || _psvPopover.style.display === 'none') return;
     _psvPopover.style.display = 'none';
+    if (_pdfLoadingController) { _pdfLoadingController.abort(); _pdfLoadingController = null; }
+    if (history.state && history.state.psvModal) history.back();
   }
 
-  function _psvTab(src, btn) {
-    const frame = document.getElementById('ay-psv-frame');
-    if (frame) frame.src = src;
-    document.querySelectorAll('.ay-psv-tab').forEach(b => b.classList.remove('ay-psv-tab--on'));
-    btn.classList.add('ay-psv-tab--on');
+  function _psvTab(idx) {
+    document.querySelectorAll('.ay-psv-tab').forEach((b, i) => b.classList.toggle('ay-psv-tab--on', i === idx));
+    const extLink = document.getElementById('ay-psv-external');
+    if (extLink) extLink.href = PSV_PDFS[idx].src;
+    const wrap = document.getElementById('ay-psv-canvas-wrap');
+    if (wrap) wrap.scrollTop = 0;
+    _renderPdf(PSV_PDFS[idx].src);
+  }
+
+  async function _loadPdfJs() {
+    if (window.pdfjsLib) return;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  async function _renderPdf(src) {
+    if (_pdfLoadingController) _pdfLoadingController.abort();
+    const ctrl = new AbortController();
+    _pdfLoadingController = ctrl;
+
+    const container = document.getElementById('ay-psv-canvas-container');
+    if (!container) return;
+    container.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--ink-3);font-family:var(--body)">Cargando PDF…</div>';
+
+    try {
+      await _loadPdfJs();
+      if (ctrl.signal.aborted) return;
+      const pdf = await window.pdfjsLib.getDocument(src).promise;
+      if (ctrl.signal.aborted) return;
+      container.innerHTML = '';
+      const wrap = document.getElementById('ay-psv-canvas-wrap');
+      const availableWidth = (wrap ? wrap.clientWidth : window.innerWidth) - 24;
+      for (let i = 1; i <= pdf.numPages; i++) {
+        if (ctrl.signal.aborted) return;
+        const page = await pdf.getPage(i);
+        const vp1 = page.getViewport({ scale: 1 });
+        const scale = Math.min(2.5, availableWidth / vp1.width);
+        const viewport = page.getViewport({ scale });
+        const dpr = window.devicePixelRatio || 1;
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.floor(viewport.width  * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.cssText = `width:100%;max-width:${Math.floor(viewport.width)}px;display:block;margin-bottom:6px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.12)`;
+        container.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        if (ctrl.signal.aborted) return;
+      }
+    } catch (e) {
+      if (!ctrl.signal.aborted) {
+        container.innerHTML = `<div style="padding:2rem;text-align:center;font-family:var(--body);color:var(--ink-3)">
+          <div style="margin-bottom:.5rem">No se pudo cargar el PDF.</div>
+          <small>${e.message}</small>
+        </div>`;
+      }
+    }
   }
 
   function psvInfoIconHtml() {
@@ -258,5 +331,6 @@ const Ayudante = (() => {
     getImgHint,
     _closeInfoPanel,
     _psvTab,
+    _renderPdf,
   };
 })();

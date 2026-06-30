@@ -1,4 +1,4 @@
-const CACHE = 'clauger-v11';
+const CACHE = 'clauger-v12';
 const VERSION = '26_02';
 
 // Archivos solo para fallback offline
@@ -19,7 +19,11 @@ const OFFLINE_FILES = [
   './styles/forms.css',
   './styles/equipment.css',
   './styles/checklist.css',
-  './styles/photos.css'
+  './styles/photos.css',
+  './imagenes/ayuda-psv/Infografias PSV_AWP.pdf',
+  './imagenes/ayuda-psv/Infografias PSV_CASTEL.pdf',
+  './imagenes/ayuda-psv/Infografias PSV_Danfoss.pdf',
+  './imagenes/ayuda-psv/Infografias PSV_Herl.pdf'
 ];
 
 self.addEventListener('install', e => {
@@ -68,8 +72,14 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Peticiones externas (CDN, etc): network con fallback
+  // Peticiones externas (CDN, etc): network-first, cachea en éxito para offline
   e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+    fetch(e.request).then(res => {
+      if (res.ok) {
+        const clone = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+      }
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });
