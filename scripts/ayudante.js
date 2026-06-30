@@ -41,7 +41,8 @@ const Ayudante = (() => {
     window.addEventListener('popstate', () => {
       if (_psvPopover && _psvPopover.style.display !== 'none') {
         _psvPopover.style.display = 'none';
-        if (_pdfLoadingController) { _pdfLoadingController.abort(); _pdfLoadingController = null; }
+        const iframe = document.getElementById('ay-psv-iframe');
+        if (iframe) iframe.src = '';
       }
     });
 
@@ -82,10 +83,10 @@ const Ayudante = (() => {
     _psvPopover.id = 'ay-psv-popover';
     _psvPopover.style.cssText = [
       'display:none;position:fixed;inset:0;z-index:10010',
-      'background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:.5rem',
+      'background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:.25rem',
     ].join(';');
     _psvPopover.innerHTML = `
-      <div id="ay-psv-modal" style="background:#fff;border-radius:var(--r-lg);width:min(98vw,880px);max-height:96vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.28);overflow:hidden">
+      <div id="ay-psv-modal" style="background:#fff;border-radius:var(--r-lg);width:99vw;height:98vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.28);overflow:hidden">
         <div id="ay-psv-header" style="background:#fff;border-bottom:1px solid var(--line-2);padding:.75rem 1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;flex-shrink:0">
           <div style="font-family:var(--display);font-weight:700;font-size:.9rem;color:var(--ink);flex:1;min-width:0">Referencia Válvulas de Seguridad (PSV)</div>
           <button onclick="Ayudante.closePsvPopover()"
@@ -102,8 +103,8 @@ const Ayudante = (() => {
             </a>
           </div>
         </div>
-        <div id="ay-psv-canvas-wrap" style="flex:1;overflow-y:auto;padding:.75rem;background:#f0f2f5;-webkit-overflow-scrolling:touch">
-          <div id="ay-psv-canvas-container"></div>
+        <div id="ay-psv-canvas-wrap" style="flex:1;overflow:hidden;background:#f0f2f5;min-height:0">
+          <iframe id="ay-psv-iframe" style="width:100%;height:100%;border:none;display:block" title="PDF PSV"></iframe>
         </div>
       </div>`;
     _psvPopover.addEventListener('click', (e) => {
@@ -126,7 +127,8 @@ const Ayudante = (() => {
   function closePsvPopover() {
     if (!_psvPopover || _psvPopover.style.display === 'none') return;
     _psvPopover.style.display = 'none';
-    if (_pdfLoadingController) { _pdfLoadingController.abort(); _pdfLoadingController = null; }
+    const iframe = document.getElementById('ay-psv-iframe');
+    if (iframe) iframe.src = '';
     if (history.state && history.state.psvModal) history.back();
   }
 
@@ -134,66 +136,12 @@ const Ayudante = (() => {
     document.querySelectorAll('.ay-psv-tab').forEach((b, i) => b.classList.toggle('ay-psv-tab--on', i === idx));
     const extLink = document.getElementById('ay-psv-external');
     if (extLink) extLink.href = PSV_PDFS[idx].src;
-    const wrap = document.getElementById('ay-psv-canvas-wrap');
-    if (wrap) wrap.scrollTop = 0;
     _renderPdf(PSV_PDFS[idx].src);
   }
 
-  async function _loadPdfJs() {
-    if (window.pdfjsLib) return;
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  }
-
-  async function _renderPdf(src) {
-    if (_pdfLoadingController) _pdfLoadingController.abort();
-    const ctrl = new AbortController();
-    _pdfLoadingController = ctrl;
-
-    const container = document.getElementById('ay-psv-canvas-container');
-    if (!container) return;
-    container.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--ink-3);font-family:var(--body)">Cargando PDF…</div>';
-
-    try {
-      await _loadPdfJs();
-      if (ctrl.signal.aborted) return;
-      const pdf = await window.pdfjsLib.getDocument(src).promise;
-      if (ctrl.signal.aborted) return;
-      container.innerHTML = '';
-      const wrap = document.getElementById('ay-psv-canvas-wrap');
-      const availableWidth = (wrap ? wrap.clientWidth : window.innerWidth) - 24;
-      for (let i = 1; i <= pdf.numPages; i++) {
-        if (ctrl.signal.aborted) return;
-        const page = await pdf.getPage(i);
-        const vp1 = page.getViewport({ scale: 1 });
-        const scale = Math.min(2.5, availableWidth / vp1.width);
-        const viewport = page.getViewport({ scale });
-        const dpr = window.devicePixelRatio || 1;
-        const canvas = document.createElement('canvas');
-        canvas.width  = Math.floor(viewport.width  * dpr);
-        canvas.height = Math.floor(viewport.height * dpr);
-        canvas.style.cssText = `width:100%;max-width:${Math.floor(viewport.width)}px;display:block;margin-bottom:6px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.12)`;
-        container.appendChild(canvas);
-        const ctx = canvas.getContext('2d');
-        ctx.scale(dpr, dpr);
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        if (ctrl.signal.aborted) return;
-      }
-    } catch (e) {
-      if (!ctrl.signal.aborted) {
-        container.innerHTML = `<div style="padding:2rem;text-align:center;font-family:var(--body);color:var(--ink-3)">
-          <div style="margin-bottom:.5rem">No se pudo cargar el PDF.</div>
-          <small>${e.message}</small>
-        </div>`;
-      }
-    }
+  function _renderPdf(src) {
+    const iframe = document.getElementById('ay-psv-iframe');
+    if (iframe) iframe.src = src;
   }
 
   function psvInfoIconHtml() {
