@@ -48,6 +48,10 @@ const AppState = {
     indiceData: { items: [] },
     contraportadaData: { texto: '' },
 
+    // Fotos y Archivos Generales
+    fotosGeneralesData: [],
+    archivosGeneralesData: [],
+
     // Termografía
     termografiaData: [],
     currentTermografia: null,
@@ -105,6 +109,8 @@ function resetState() {
     AppState.portadaData = { titulo: '', subtitulo: '', cliente: '', direccion: '', cp: '', localidad: '', provincia: '', referencia: '', anio: '' };
     AppState.indiceData = { items: [] };
     AppState.contraportadaData = { texto: '' };
+    AppState.fotosGeneralesData = [];
+    AppState.archivosGeneralesData = [];
     AppState.termografiaData = [];
     AppState.currentTermografia = null;
     AppState.planificacionData = { textoRevision: '', textoInspeccion: '' };

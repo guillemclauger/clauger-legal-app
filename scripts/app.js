@@ -182,6 +182,8 @@ const App = {
                 contraportadaData: AppState.contraportadaData || { texto: '' },
                 certPsvArchivos: AppState.certPsvArchivos || [],
                 actaInicialArchivos: AppState.actaInicialArchivos || [],
+                fotosGeneralesData: AppState.fotosGeneralesData || [],
+                archivosGeneralesData: AppState.archivosGeneralesData || [],
                 // Excluir campos derivados/transitorios de termografía
                 termografiaData: (AppState.termografiaData || []).map(t => {
                     const copy = Object.assign({}, t);
@@ -244,6 +246,8 @@ const App = {
             AppState.contraportadaData  = restored.contraportadaData || { texto: '' };
             AppState.certPsvArchivos    = restored.certPsvArchivos || [];
             AppState.actaInicialArchivos = restored.actaInicialArchivos || [];
+            AppState.fotosGeneralesData = restored.fotosGeneralesData || [];
+            AppState.archivosGeneralesData = restored.archivosGeneralesData || [];
             AppState.termografiaData    = restored.termografiaData || [];
             AppState.planificacionData  = restored.planificacionData || { textoRevision: '', textoInspeccion: '' };
             this._rebuildTermoCache();
@@ -1090,6 +1094,8 @@ const App = {
                 };
                 sidebar.appendChild(btn);
             });
+        } else if (AppState.currentPage === 'fotos_generales') {
+            sidebar.innerHTML = `<div class="sidebar-title">${ic('camera')} FOTOS Y ARCHIVOS</div>`;
         } else if (AppState.currentPage === 'servicios') {
             sidebar.innerHTML = `<div class="sidebar-title">${ic('snowflake')} SERVICIOS</div>`;
             
@@ -1222,6 +1228,8 @@ const App = {
             } else {
                 workspace.innerHTML = `<div class="empty-workspace"><div><div class="empty-icon">${ic('snowflake')}</div><div style="font-size:1.25rem;font-weight:bold;margin-bottom:0.5rem">Selecciona o agrega un Servicio</div><p>Usa el menú lateral para comenzar</p></div></div>`;
             }
+        } else if (AppState.currentPage === 'fotos_generales') {
+            this.renderFotosGenerales();
         } else {
             if (!AppState.currentSection) {
                 workspace.innerHTML = `<div class="empty-workspace"><div><div class="empty-icon">${ic('clipboard')}</div><div style="font-size:1.25rem;font-weight:bold;margin-bottom:0.5rem">Selecciona una sección</div><p>Usa el menú lateral para comenzar</p></div></div>`;
@@ -2900,7 +2908,7 @@ www.clauger.com`;
         await ClaugerDB.savePhoto(id, file);
         const url = URL.createObjectURL(file);
         this._idbPhotoMap.set(url, id);
-        AppState[storeKey].push({ name: file.name, data: url, size: file.size, timestamp: new Date().toISOString() });
+        AppState[storeKey].push({ name: file.name, data: url, size: file.size, type: file.type, timestamp: new Date().toISOString() });
         renderFn();
         this.showToast(`${file.name} adjuntado`, 'success');
         this._doAutosave();
@@ -2995,6 +3003,173 @@ www.clauger.com`;
             this.renderCertPsv();
             this.showToast('Archivo eliminado', 'success');
             this._doAutosave();
+        }
+    },
+
+    // ── Fotos y Archivos Generales ──────────────────────────────────────────
+    _fileDropZoneHtml(elId, clickFn) {
+        return `<div id="dropzone-${elId}"
+            style="border:2px dashed #d1d5db;border-radius:0.75rem;padding:2rem;text-align:center;cursor:pointer;background:#fafafa;transition:border-color .15s,background .15s;margin-bottom:1.5rem"
+            onclick="${clickFn}">
+            <div style="margin-bottom:0.5rem;pointer-events:none">${ic('file')}</div>
+            <div style="font-size:0.9rem;color:#374151;font-weight:600;pointer-events:none">📎 Arrastra archivos aquí o haz clic</div>
+            <div style="font-size:0.75rem;color:#9ca3af;margin-top:0.35rem;pointer-events:none">PDF, Word, Excel, imágenes u otros — varios a la vez</div>
+        </div>`;
+    },
+
+    _setupFileDropZone(elId, storeKey, renderFn) {
+        const zone = document.getElementById('dropzone-' + elId);
+        if (!zone) return;
+        zone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            zone.style.borderColor = '#2f5aa6';
+            zone.style.background = '#eff6ff';
+        });
+        zone.addEventListener('dragleave', () => {
+            zone.style.borderColor = '#d1d5db';
+            zone.style.background = '#fafafa';
+        });
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            zone.style.borderColor = '#d1d5db';
+            zone.style.background = '#fafafa';
+            Array.from(e.dataTransfer.files).forEach(f => this._storePdf(f, storeKey, renderFn));
+        });
+    },
+
+    _archivoGeneralFilaHtml(archivo, idx) {
+        return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 1rem;border:1px solid #e5e7eb;border-radius:0.5rem;background:#f9fafb;margin-bottom:0.6rem">
+            <span style="flex-shrink:0">${ic('file')}</span>
+            <div style="flex:1;min-width:0;cursor:pointer" onclick="App.previewArchivoGeneral(${idx})">
+                <div style="font-weight:600;font-size:0.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2f5aa6" title="${archivo.name}">${archivo.name}</div>
+                <div style="font-size:0.75rem;color:#6b7280">${(archivo.size/1024).toFixed(0)} KB · ${new Date(archivo.timestamp).toLocaleDateString('es-ES')}</div>
+            </div>
+            <button onclick="App.previewArchivoGeneral(${idx})" style="background:#2f5aa6;color:#fff;border:none;border-radius:0.375rem;padding:0.35rem 0.75rem;font-size:0.8rem;cursor:pointer;font-weight:600">👁 Ver</button>
+            <button onclick="App.removeArchivoGeneral(${idx})" style="background:#ef4444;color:#fff;border:none;border-radius:0.375rem;padding:0.35rem 0.6rem;font-size:1rem;cursor:pointer;font-weight:700;line-height:1">×</button>
+        </div>`;
+    },
+
+    renderFotosGenerales() {
+        const workspace = document.getElementById('workspace');
+        const fotos = AppState.fotosGeneralesData;
+        const archivos = AppState.archivosGeneralesData;
+
+        const fotosGrid = fotos.length ? `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;margin-top:0.75rem">
+                ${fotos.map((img, idx) => `
+                    <div style="border-radius:0.5rem;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);background:#fff">
+                        <div style="position:relative">
+                            <img src="${img.data}" onclick="App.viewImage('${img.data}')" style="width:100%;height:150px;object-fit:cover;cursor:pointer;display:block">
+                            <button class="photo-remove" onclick="App.removeFotoGeneral(${idx})">×</button>
+                        </div>
+                        <textarea placeholder="Descripción (opcional)" onchange="App.updateFotoGeneralDesc(${idx}, this.value)" style="width:100%;border:none;border-top:1px solid #e5e7eb;padding:0.5rem;font-size:0.78rem;font-family:inherit;resize:vertical;min-height:2.4rem;box-sizing:border-box">${img.descripcion || ''}</textarea>
+                    </div>
+                `).join('')}
+            </div>
+        ` : '<p style="color:#9ca3af;font-size:0.875rem;text-align:center;padding:1rem 0">Sin fotos añadidas</p>';
+
+        const archivosLista = archivos.length === 0
+            ? '<p style="color:#9ca3af;font-size:0.875rem;text-align:center;padding:1rem 0">Sin archivos adjuntos</p>'
+            : archivos.map((archivo, idx) => this._archivoGeneralFilaHtml(archivo, idx)).join('');
+
+        workspace.innerHTML = `
+            <div class="section-card">
+                <div class="section-title">${ic('camera')} Fotos Generales</div>
+                <div id="dropzone-fotosGenerales"
+                     ondragover="event.preventDefault();this.style.borderColor='#2f5aa6';this.style.background='#eff6ff'"
+                     ondragleave="this.style.borderColor='#d1d5db';this.style.background='#fafafa'"
+                     ondrop="App._dropFotoGeneral(event)"
+                     onclick="App._showPhotoSourceDialog(()=>{App.uploadFotoGeneral(true)},()=>{App.uploadFotoGeneral(false)})"
+                     style="border:2px dashed #d1d5db;border-radius:0.75rem;padding:1.5rem;text-align:center;cursor:pointer;background:#fafafa;transition:border-color .15s,background .15s;margin-bottom:0.5rem">
+                    <div style="margin-bottom:0.4rem;color:#6b7280">${ic('camera')}</div>
+                    <div style="font-size:0.9rem;color:#374151;font-weight:600">📷 Añadir foto</div>
+                    <div style="font-size:0.75rem;color:#9ca3af;margin-top:0.25rem">Sin límite — arrastra imágenes aquí o toca para elegir cámara/galería</div>
+                </div>
+                ${fotosGrid}
+            </div>
+            <div class="section-card">
+                <div class="section-title">${ic('paperclip')} Archivos Adjuntos</div>
+                ${this._fileDropZoneHtml('archivosGenerales', 'App.uploadArchivoGeneral()')}
+                ${archivosLista}
+            </div>`;
+        this._setupFileDropZone('archivosGenerales', 'archivosGeneralesData', () => this.renderFotosGenerales());
+    },
+
+    uploadFotoGeneral(capture) {
+        this._pickImages(files => {
+            this._readMultipleImages(
+                files,
+                img => AppState.fotosGeneralesData.push(Object.assign(img, { descripcion: '' })),
+                () => this.renderFotosGenerales()
+            );
+        }, capture);
+    },
+
+    _dropFotoGeneral(event) {
+        event.preventDefault();
+        event.currentTarget.style.borderColor = '#d1d5db';
+        event.currentTarget.style.background = '#fafafa';
+        this._readMultipleImages(
+            Array.from(event.dataTransfer.files),
+            img => AppState.fotosGeneralesData.push(Object.assign(img, { descripcion: '' })),
+            () => this.renderFotosGenerales()
+        );
+    },
+
+    removeFotoGeneral(idx) {
+        if (confirm('¿Eliminar esta foto?')) {
+            this._revokeAndDeletePhoto(AppState.fotosGeneralesData[idx]?.data);
+            AppState.fotosGeneralesData.splice(idx, 1);
+            this.renderFotosGenerales();
+            this.showToast('Foto eliminada', 'success');
+            this._doAutosave();
+        }
+    },
+
+    updateFotoGeneralDesc(idx, texto) {
+        if (AppState.fotosGeneralesData[idx]) {
+            AppState.fotosGeneralesData[idx].descripcion = texto;
+            this._doAutosave();
+        }
+    },
+
+    uploadArchivoGeneral() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.onchange = (e) => {
+            Array.from(e.target.files).forEach(f => this._storePdf(f, 'archivosGeneralesData', () => this.renderFotosGenerales()));
+        };
+        input.click();
+    },
+
+    removeArchivoGeneral(idx) {
+        if (confirm('¿Eliminar este archivo?')) {
+            this._revokeAndDeletePhoto(AppState.archivosGeneralesData[idx]?.data);
+            AppState.archivosGeneralesData.splice(idx, 1);
+            this.renderFotosGenerales();
+            this.showToast('Archivo eliminado', 'success');
+            this._doAutosave();
+        }
+    },
+
+    previewArchivoGeneral(idx) {
+        const archivo = AppState.archivosGeneralesData[idx];
+        if (!archivo) return;
+        const ext = (archivo.name.split('.').pop() || '').toLowerCase();
+        const extMime = {
+            pdf: 'application/pdf',
+            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            xls: 'application/vnd.ms-excel',
+            png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp'
+        };
+        const mime = archivo.type || extMime[ext] || '';
+        if (mime.startsWith('image/')) { this.viewImage(archivo.data); return; }
+        if (typeof Ayudante !== 'undefined' && Ayudante.previewFile) {
+            Ayudante.previewFile({ name: archivo.name, url: archivo.data, mimeType: mime, ext });
+        } else {
+            this._downloadPdf(archivo.data, archivo.name);
         }
     },
 
@@ -4832,6 +5007,8 @@ www.clauger.com`;
             contraportadaData: AppState.contraportadaData || { texto: '' },
             certPsvArchivos: AppState.certPsvArchivos || [],
             actaInicialArchivos: AppState.actaInicialArchivos || [],
+            fotosGeneralesData: AppState.fotosGeneralesData || [],
+            archivosGeneralesData: AppState.archivosGeneralesData || [],
             termografiaData: termografiaExport,
             planificacionData: AppState.planificacionData || { textoRevision: '', textoInspeccion: '' },
             exportDate: new Date().toISOString()
@@ -4945,6 +5122,8 @@ www.clauger.com`;
         AppState.contraportadaData    = data.contraportadaData    || { texto: '' };
         AppState.certPsvArchivos      = data.certPsvArchivos      || [];
         AppState.actaInicialArchivos  = data.actaInicialArchivos  || [];
+        AppState.fotosGeneralesData   = data.fotosGeneralesData   || [];
+        AppState.archivosGeneralesData = data.archivosGeneralesData || [];
         AppState.termografiaData      = data.termografiaData      || [];
         AppState.planificacionData    = data.planificacionData    || { textoRevision: '', textoInspeccion: '' };
 
@@ -4955,6 +5134,8 @@ www.clauger.com`;
         AppState.detectorsData       = await this._normalizePhotos(AppState.detectorsData);
         AppState.certPsvArchivos     = await this._normalizePhotos(AppState.certPsvArchivos);
         AppState.actaInicialArchivos = await this._normalizePhotos(AppState.actaInicialArchivos);
+        AppState.fotosGeneralesData  = await this._normalizePhotos(AppState.fotosGeneralesData);
+        AppState.archivosGeneralesData = await this._normalizePhotos(AppState.archivosGeneralesData);
         AppState.termografiaData     = await this._normalizePhotos(AppState.termografiaData);
 
         this._rebuildTermoCache();
@@ -5697,6 +5878,31 @@ ${(() => {
 </div><!-- /body -->
 </div><!-- /wrap -->
 
+<!-- ══ ANEXO: FOTOS Y ARCHIVOS GENERALES ══ -->
+${(() => {
+    const fotosParaAnexo = (AppState.fotosGeneralesData || []).filter(f => f.incluirEnPdf !== false);
+    const archivosParaAnexo = AppState.archivosGeneralesData || [];
+    if (!fotosParaAnexo.length && !archivosParaAnexo.length) return '';
+    let out = '';
+    if (fotosParaAnexo.length) {
+        for (let i = 0; i < fotosParaAnexo.length; i += 2) {
+            const chunk = fotosParaAnexo.slice(i, i + 2);
+            const title = i === 0 ? '<div class="blk-h"><span class="t">Anexo — Fotos Generales</span></div>' : '';
+            out += `<div class="blk page-break">${title}<div class="img-grid">${chunk.map(f => `<div class="img-cell"><img src="${f.data}" alt="Foto">${f.descripcion ? `<div style="font-size:9.5px;color:var(--ink-2);margin-top:4px">${f.descripcion}</div>` : ''}</div>`).join('')}</div></div>`;
+        }
+    }
+    if (archivosParaAnexo.length) {
+        out += `<div class="blk page-break"><div class="blk-h"><span class="t">Documentos Adjuntos</span></div>
+            <p style="font-size:10.5px;color:var(--ink-2);margin-bottom:10px">Archivos disponibles en el informe digital.</p>
+            <table class="tbl">
+                <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead>
+                <tbody>${archivosParaAnexo.map(a => `<tr><td>${a.name}</td><td>${(a.name.split('.').pop() || '').toUpperCase()}</td><td>${(a.size/1024).toFixed(0)} KB</td></tr>`).join('')}</tbody>
+            </table>
+        </div>`;
+    }
+    return out;
+})()}
+
 <!-- ══ CONTRAPORTADA ══ -->
 <div class="page page-back">
   <div style="display:flex;height:5px"><i style="width:120px;background:var(--rouge)"></i><i style="flex:1;background:var(--accent)"></i></div>
@@ -6332,6 +6538,43 @@ ${blkH('Tabla 1 — Periodicidad según Tn eq. CO₂')}
 </table></div>
 </div>`;
 
+            // ── Anexo: Fotos y Archivos Generales ────────────────────────────────────
+            const fotosParaAnexo = (AppState.fotosGeneralesData || []).filter(f => f.incluirEnPdf !== false);
+            const archivosParaAnexo = AppState.archivosGeneralesData || [];
+            let fotosArchivosAnexoHtml = '';
+            if (fotosParaAnexo.length > 0) {
+                const fotoPages = [];
+                for (let i = 0; i < fotosParaAnexo.length; i += 2) {
+                    const chunk = fotosParaAnexo.slice(i, i + 2);
+                    fotoPages.push(`<div class="page page-break">
+                        ${i === 0 ? rh('Anexo — Fotos Generales', pv('cliente') || '') : ''}
+                        <div class="pad" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                            ${chunk.map(f => `<div style="text-align:center">
+                                <img src="${f.data}" style="width:100%;max-height:340px;object-fit:contain;border-radius:6px;box-shadow:0 1px 6px rgba(0,0,0,.15)">
+                                ${f.descripcion ? `<div style="font-size:10.5px;color:var(--ink-2);margin-top:6px">${f.descripcion}</div>` : ''}
+                            </div>`).join('')}
+                        </div>
+                        ${rf(pv('referencia'))}
+                    </div>`);
+                }
+                fotosArchivosAnexoHtml += fotoPages.join('');
+            }
+            if (archivosParaAnexo.length > 0) {
+                fotosArchivosAnexoHtml += `<div class="page page-break">
+                    ${rh('Documentos Adjuntos', pv('cliente') || '')}
+                    <div class="pad">
+                        <p style="font-size:11px;color:var(--ink-2);margin-bottom:12px">Archivos disponibles en el informe digital.</p>
+                        <table class="tbl">
+                            <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead>
+                            <tbody>
+                                ${archivosParaAnexo.map(a => `<tr><td>${a.name}</td><td>${(a.name.split('.').pop() || '').toUpperCase()}</td><td>${(a.size/1024).toFixed(0)} KB</td></tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    ${rf(pv('referencia'))}
+                </div>`;
+            }
+
             // ── Full HTML ──────────────────────────────────────────────────────────
             const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>${(()=>{const _f=revision['FECHA REVISIÓN']||'';const _y=(_f.match(/\d{4}/)||[new Date().getFullYear()])[0];const _d=(certificadoIF['DICTAMEN']||'INFORME').toUpperCase().replace(/[()]/g,'').replace(/\s+/g,' ').trim();const _rawCif=(informeIF['CIF']||'').trim();const _cif=_rawCif?(/^CIF\s/i.test(_rawCif)?_rawCif:'CIF '+_rawCif):'SIN_CIF';return `${_y}_${_d}_${_cif}`;})()}</title>
@@ -6392,6 +6635,8 @@ ${divider(_secNum('planificacion'),'Planificación','Próximas revisiones e insp
   ${planificacionHtml}
   ${rf(pv('referencia'))}
 </div>` : ''}
+
+${fotosArchivosAnexoHtml}
 
 <!-- ══ CONTRAPORTADA ══ -->
 ${this._buildContraportadaHtml(pv, contraTexto)}

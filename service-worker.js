@@ -1,4 +1,4 @@
-const CACHE = 'clauger-v12';
+const CACHE = 'clauger-v15';
 const VERSION = '26_02';
 
 // Archivos solo para fallback offline
@@ -13,21 +13,32 @@ const OFFLINE_FILES = [
   './scripts/db.js',
   './scripts/app.js',
   './scripts/ayudante.js',
+  './scripts/psv-data.js',
   './scripts/tutorial.js',
   './styles/main.css',
   './styles/login.css',
   './styles/forms.css',
   './styles/equipment.css',
   './styles/checklist.css',
-  './styles/photos.css',
-  './imagenes/ayuda-psv/Infografias PSV_AWP.pdf',
-  './imagenes/ayuda-psv/Infografias PSV_CASTEL.pdf',
-  './imagenes/ayuda-psv/Infografias PSV_Danfoss.pdf',
-  './imagenes/ayuda-psv/Infografias PSV_Herl.pdf'
+  './styles/photos.css'
+];
+
+const PDFJS_FILES = [
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.7.2/mammoth.browser.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(OFFLINE_FILES)));
+  e.waitUntil(
+    caches.open(CACHE).then(c =>
+      c.addAll(OFFLINE_FILES).then(() =>
+        // PDF.js se precachea por separado: si la CDN falla, el install no se rompe
+        Promise.allSettled(PDFJS_FILES.map(url => c.add(url)))
+      )
+    )
+  );
   self.skipWaiting();
 });
 
